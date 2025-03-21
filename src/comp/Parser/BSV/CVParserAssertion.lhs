@@ -34,6 +34,7 @@ Look at transAssertStmt for a template.
 > import PreIds
 > import PreStrings
 > import Util(itos, unconsOrErr)
+> import qualified Parser.BSV.CVParserCommon as Common
 
 These functions unroll the sequences and properties
 and inline all parameters and sequences
@@ -41,7 +42,7 @@ and inline all parameters and sequences
 > unrollSEQPROP :: Position -> Bool -> SVA_SP -> ISConvMonad (Either SVA_SEQ SVA_PROP)
 > unrollSEQPROP pos allowProp orig@(SVA_SP_Expr e@(CApply (CVar nm) params) rep) =
 >  do
->    isSEQ <- isSequence nm
+>    isSEQ <- Common.isSequence nm
 >    if (isSEQ)
 >      then do
 >        res <- unrollSEQ pos orig
@@ -52,14 +53,14 @@ and inline all parameters and sequences
 >        when (not (null ss)) $ cvtErr pos (EForbiddenSequenceDecl "parameter1" (pvpString ss))
 >        ps <- filterM isPropertyParam params
 >        when (not (null ps)) $ cvtErr pos (EForbiddenPropertyDecl "parameter1" (pvpString ps))
->        isPROP <- isProperty nm
+>        isPROP <- Common.isProperty nm
 >        if (not isPROP)
 >          then do
 >            rep1 <- fixUnboundRep rep
 >            return (Left (SVA_SEQ_Expr e rep1))
 >          else do
 >            (when (not allowProp)) $ cvtErr pos (EForbiddenPropertyDecl "sequence2" (pvpString nm))
->            res <- findPropM nm
+>            res <- Common.findPropM nm
 >            case res of
 >              Just (ISProperty po body) -> do
 >                paramed <- replaceParamsProp pos body params
@@ -67,9 +68,9 @@ and inline all parameters and sequences
 >                return $ Right unrolled
 >              _ -> internalError $ "CVParserImperative.unrollSEQPROP: " ++ (pvpString nm) ++ " : " ++ pvpString res
 >  where
->    isSequenceParam (CVar nm) = isSequence nm
+>    isSequenceParam (CVar nm) = Common.isSequence nm
 >    isSequenceParam z = return False
->    isPropertyParam (CVar nm) = isProperty nm
+>    isPropertyParam (CVar nm) = Common.isProperty nm
 >    isPropertyParam z = return False
 > unrollSEQPROP pos b (SVA_SP_Expr (CVar nm) rep) =
 >   unrollSEQPROP pos b (SVA_SP_Expr (CApply (CVar nm) []) rep) --re-use above code
@@ -122,12 +123,12 @@ and inline all parameters and sequences
 >    when (not (null ss)) $ cvtErr pos (EForbiddenSequenceDecl "parameter2" (pvpString ss))
 >    ps <- filterM isPropertyParam params
 >    when (not (null ps)) $ cvtErr pos (EForbiddenPropertyDecl "parameter3" (pvpString ps))
->    isPROP <- isProperty nm
+>    isPROP <- Common.isProperty nm
 >    when (isPROP) $ cvtErr pos (EForbiddenPropertyDecl "sequence4" (pvpString nm))
 >    rep1 <- fixUnboundRep rep
->    isSEQ <- isSequence nm
+>    isSEQ <- Common.isSequence nm
 >    if (not isSEQ) then return (SVA_SEQ_Expr exp rep1) else do
->      res <- findSeqM nm
+>      res <- Common.findSeqM nm
 >      case res of
 >        Just (ISSequence po body) -> do
 >          paramed <- replaceParamsSeq pos body params
@@ -135,9 +136,9 @@ and inline all parameters and sequences
 >          return (SVA_SEQ_Parens unrolled rep1)
 >        _ -> internalError $ "CVParserImperative.unrollSEQ: " ++ (pvpString nm) ++ " : " ++ pvpString res
 >  where
->    isSequenceParam (CVar nm) = isSequence nm
+>    isSequenceParam (CVar nm) = Common.isSequence nm
 >    isSequenceParam z = return False
->    isPropertyParam (CVar nm) = isProperty nm
+>    isPropertyParam (CVar nm) = Common.isProperty nm
 >    isPropertyParam z = return False
 > unrollSEQ pos (SVA_SP_Expr (CVar nm) rep) =
 >   unrollSEQ pos (SVA_SP_Expr (CApply (CVar nm) []) rep) --re-use above code
@@ -328,11 +329,11 @@ for recursive properties may be allowed.
 >    if nm `elem` calls
 >      then cvtErr (getPosition e) (EUnsupportedMutualRecursion (map show (nm : calls)))
 >      else do
->        isSEQ <- isSequence nm
->        isPROP <- isProperty nm
+>        isSEQ <- Common.isSequence nm
+>        isPROP <- Common.isProperty nm
 >        if isSEQ
 >         then do
->           mISSeq <- findSeqM nm
+>           mISSeq <- Common.findSeqM nm
 >           let seq = case mISSeq of
 >                 (Just (ISSequence _ (_,_,_,_,s))) -> s
 >                 _ -> internalError "CVParserAssertion.checkRecursionExpr: ISSeq"
@@ -340,7 +341,7 @@ for recursive properties may be allowed.
 >           return ()
 >         else if (isPROP)
 >           then do
->             mISProp <- findPropM nm
+>             mISProp <- Common.findPropM nm
 >             let seq = case mISProp of
 >                   (Just (ISProperty _ (_,_,_,_,s))) -> s
 >                   _ -> internalError "CVParserAssertion.checkRecursionExpr: ISProp"
@@ -1651,17 +1652,17 @@ HELPER Functions
 > isSequence :: Id -> ISConvMonad Bool
 > isSequence var = do
 >   state <- get
->   return $ isJust $ findSeq var $ issSequences state
+>   return $ isJust $ Common.findSeq var $ issSequences state
 
 > isProperty :: Id -> ISConvMonad Bool
 > isProperty var = do
 >   state <- get
->   return $ isJust $ findProp var $ issProperties state
+>   return $ isJust $ Common.findProp var $ issProperties state
 
 Find a declared sequence
 
-> findSeq :: Id -> [SequenceInfo] -> Maybe ImperativeStatement
-> findSeq nm issSeqs = fd issSeqs
+> findSeqLocal :: Id -> [SequenceInfo] -> Maybe ImperativeStatement
+> findSeqLocal nm issSeqs = fd issSeqs
 >  where
 >   fd [] = Nothing
 >   fd (s:ss) = case M.lookup nm s of
@@ -1684,7 +1685,7 @@ Add a sequence to the environment
 >  state <- get
 >  let seqs = issSequences state
 >      (s, ss) = unconsOrErr "CVParserAssertion.addSequence: missing frame" seqs
->  case findSeq nm seqs of
+>  case findSeqLocal nm seqs of
 >    Nothing -> put $ state {issSequences = (M.insert nm body s):ss}
 >    Just (ISSequence prevPos decl) ->
 >        throwError [(pos, EMultipleDecl (pvpString nm) prevPos)]
@@ -1693,8 +1694,8 @@ Add a sequence to the environment
 
 Find a declared property
 
-> findProp :: Id -> [PropertyInfo] -> Maybe ImperativeStatement
-> findProp nm issPrs = fd issPrs
+> findPropLocal :: Id -> [PropertyInfo] -> Maybe ImperativeStatement
+> findPropLocal nm issPrs = fd issPrs
 >  where
 >   fd [] = Nothing
 >   fd (p:ps) = case M.lookup nm p of
@@ -1717,7 +1718,7 @@ Add a property to the environment
 >  state <- get
 >  let props = issProperties state
 >      (p, ps) = unconsOrErr "CVParserAssertion.addProperty: missing frame" props
->  case findProp nm props of
+>  case findPropLocal nm props of
 >    Nothing -> put $ state {issProperties = (M.insert nm body p):ps}
 >    Just (ISProperty prevPos _) -> throwError $ [(pos, EMultipleDecl (pvpString nm) prevPos)]
 >    _ -> internalError ("CVParserImperative:addProperty: " ++ (pvpString body))

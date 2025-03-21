@@ -10,6 +10,10 @@
 > import Control.Monad(when)
 > import Control.Monad.State(modify, gets, get, put)
 > import Control.Monad.Except(throwError)
+> import Control.Monad.Trans(lift)
+> import Text.Parsec hiding(getPosition)
+> import Text.Parsec.Prim(ParsecT)
+> import Data.Functor.Identity(Identity)
 > import SystemVerilogTokens
 > import Flags(Flags, passThroughAssertions)
 
@@ -19,7 +23,6 @@
 > import qualified Data.Map as M
 > import Debug.Trace(trace)
 
-> import Parsec hiding(getPosition)
 > import Error(internalError, EMsg, WMsg, ErrMsg(..), ErrorHandle)
 > import Position
 > import Id
@@ -45,7 +48,7 @@ type of the BSV parser
 >       parserflags :: Flags -- Command-line flags
 >     }
 
-> type SV_Parser result = GenParser SV_Token SV_Parser_State result
+> type SV_Parser result = ParsecT SV_Token SV_Parser_State Identity result
 
 
 struct field: identifier and qualified type
@@ -204,7 +207,7 @@ that they will turn up in this order.
 >  | BVI_interface (Id, Id, [ImperativeStatement]) -- Ids are name, type-constructor
 >          -- stmts are all sub-interfaces, methods, output_clock, output_reset
 >  | BVI_schedule ([Id], MethodConflictOp, [Id])
->  | BVI_path (VName, VName)
+>  | BVA_path (VName, VName)
 >  | BVI_unsync [Id]  -- for internal use only
 >    deriving (Show)
 
@@ -522,17 +525,17 @@ will be used:
 
 > data SVA_CORE_SEQ =
 >  SVA_CORE_SEQ_Expr CExpr
->   | SVA_CORE_SEQ_Asgn [ImperativeStatement]
->   | SVA_CORE_SEQ_Concat SVA_CORE_SEQ SVA_CORE_SEQ
->   | SVA_CORE_SEQ_Fuse SVA_CORE_SEQ SVA_CORE_SEQ
->   | SVA_CORE_SEQ_Or SVA_CORE_SEQ SVA_CORE_SEQ
->   | SVA_CORE_SEQ_Intersect SVA_CORE_SEQ SVA_CORE_SEQ
->   | SVA_CORE_SEQ_FirstMatch SVA_CORE_SEQ
->   | SVA_CORE_SEQ_Null SVA_CORE_SEQ
->   | SVA_CORE_SEQ_Unbound SVA_CORE_SEQ
->   | SVA_CORE_SEQ_Rep SVA_CORE_SEQ SVA_REP
->   | SVA_CORE_SEQ_Delay SVA_Delay [SVA_CORE_SEQ] SVA_CORE_SEQ SVA_CORE_SEQ
->   deriving (Show)
+>  | SVA_CORE_SEQ_Asgn [ImperativeStatement]
+>  | SVA_CORE_SEQ_Concat SVA_CORE_SEQ SVA_CORE_SEQ
+>  | SVA_CORE_SEQ_Fuse SVA_CORE_SEQ SVA_CORE_SEQ
+>  | SVA_CORE_SEQ_Or SVA_CORE_SEQ SVA_CORE_SEQ
+>  | SVA_CORE_SEQ_Intersect SVA_CORE_SEQ SVA_CORE_SEQ
+>  | SVA_CORE_SEQ_FirstMatch SVA_CORE_SEQ
+>  | SVA_CORE_SEQ_Null SVA_CORE_SEQ
+>  | SVA_CORE_SEQ_Unbound SVA_CORE_SEQ
+>  | SVA_CORE_SEQ_Rep SVA_CORE_SEQ SVA_REP
+>  | SVA_CORE_SEQ_Delay SVA_Delay [SVA_CORE_SEQ] SVA_CORE_SEQ SVA_CORE_SEQ
+>  deriving (Show)
 
 > data SVA_CORE_PROP =
 >  SVA_CORE_PROP_Seq SVA_CORE_SEQ
@@ -1177,11 +1180,7 @@ THE IMPERATIVE STATEMENT CONVERSION MONAD
 > type PropertyInfo = M.Map Id ImperativeStatement
 > type StmtChecker = ISContext -> [ImperativeStatement] -> ISConvMonad [ImperativeStatement]
 > type StmtConverter = (ISContext, Maybe CType, Maybe CExpr) -> Bool -> [ImperativeStatement] -> ISConvMonad [CStmt]
-> type ExprConverter = Position -- start of block
->                    -> ImperativeFlags -- flags
->                    -> Bool -- are we at end of block?
->                    -> [ImperativeStatement] -- statements inside block
->                    -> ISConvMonad CExpr -- resulting conversion computation
+> type ExprConverter = Position -> ImperativeFlags -> Bool -> [ImperativeStatement] -> ISConvMonad CExpr
 
 > data ISConvState = ISConvState {
 >     issFunction :: [Maybe (Id, [(Maybe CType, Id)])], -- Just function name/args
@@ -1457,3 +1456,61 @@ make a temporary id, appending accent acute, and removing keep attribute
 >                                          allowNakedExpr = True,
 >                                          allowLet = True,
 >                                          stmtContext = ISCExpression })
+
+> isSequence :: Id -> ISConvMonad Bool
+> isSequence nm = do
+>   seqs <- gets issSequences
+>   return $ isJust $ findSeq nm seqs
+
+> isProperty :: Id -> ISConvMonad Bool
+> isProperty nm = do
+>   props <- gets issProperties
+>   return $ isJust $ findProp nm props
+
+> findSeq :: Id -> [SequenceInfo] -> Maybe ImperativeStatement
+> findSeq nm [] = Nothing
+> findSeq nm (s:ss) =
+>   case nm `M.lookup` s of
+>     Nothing -> findSeq nm ss
+>     x -> x
+
+> findSeqM :: Id -> ISConvMonad (Maybe ImperativeStatement)
+> findSeqM nm = do
+>   seqs <- gets issSequences
+>   return $ findSeq nm seqs
+
+> addSequence :: Id -> ImperativeStatement -> ISConvMonad ()
+> addSequence nm body@(ISSequence pos _) = do
+>   state <- get
+>   let (s:ss) = issSequences state
+>   case findSeq nm (issSequences state) of
+>    Nothing -> put $ state {issSequences = (M.insert nm body s):ss}
+>    Just (ISSequence prevPos decl) ->
+>      throwError $ [(pos, EMultipleDecl (pvpString nm) prevPos)]
+>    _ -> internalError "CVParserCommon.addSequence"
+
+> findProp :: Id -> [PropertyInfo] -> Maybe ImperativeStatement
+> findProp nm [] = Nothing
+> findProp nm (p:ps) =
+>   case nm `M.lookup` p of
+>     Nothing -> findProp nm ps
+>     x -> x
+
+> findPropM :: Id -> ISConvMonad (Maybe ImperativeStatement)
+> findPropM nm = do
+>   props <- gets issProperties
+>   return $ findProp nm props
+
+> addProperty :: Id -> ImperativeStatement -> ISConvMonad ()
+> addProperty nm body@(ISProperty pos _) = do
+>   state <- get
+>   let (p:ps) = issProperties state
+>   case findProp nm (issProperties state) of
+>    Nothing -> put $ state {issProperties = (M.insert nm body p):ps}
+>    Just (ISProperty prevPos _) -> throwError $ [(pos, EMultipleDecl (pvpString nm) prevPos)]
+>    _ -> internalError "CVParserCommon.addProperty"
+
+> failWithErrs :: [EMsg] -> SV_Parser a
+> failWithErrs errs = do
+>   errh <- getErrHandle
+>   parserFail $ show errs

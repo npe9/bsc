@@ -7,12 +7,13 @@
 > import Data.List(mapAccumL, group, groupBy, intercalate, sort, partition, nub)
 > import Data.Maybe
 > import Control.Monad
+> import Control.Monad.Identity
 > import qualified Data.Set as S
 > -- import Debug.Trace
 
-> import Parsec hiding(getPosition)
-> import qualified Parsec(getPosition)
-> import ParsecExpr
+> import Text.Parsec hiding(getPosition)
+> import qualified Text.Parsec(getPosition)
+> import Text.Parsec.Expr
 > import PVPrint hiding(parens, colon, semi, comma, braces, brackets, char)
 > import PPrint (ppReadable)
 > import FStringCompat
@@ -1012,7 +1013,7 @@ if prefix is provided, sub-union and sub-struct constructors start with it
 >                            CInternalSummand { cis_names = [name],
 >                                               cis_arg_type = typeConstr,
 >                                               cis_tag_encoding = enc }
->                    in  ((original_summands, internal_summands), defns)
+>                    in ((original_summands, internal_summands), defns)
 >            return mkField
 >     <|> do pKeyword SV_KW_void
 >            name <- pConstructor
@@ -1727,8 +1728,29 @@ EXPRESSIONS
 > pConstructorPrimaryWith name tagged =
 >         do namedArgs <- pInBraces (pCommaSep pFieldInit)
 >            return $ CStruct (Just (not tagged)) name namedArgs
->     <|> do positionalArgs <- option [] (pConstructorPrimaryPositionalArgs tagged)
->            return $ CCon name positionalArgs
+>     <|> do pos <- getPos
+>        amcmrmps <- many1 pPortListArgs
+>        let ((args, mClock, mReset, mPower),ok) =
+>              case amcmrmps of
+>                    [x] -> (x,True)
+>                    xs  -> let p(_,Nothing,Nothing,Nothing) = True
+>                               p _ = False
+>                               q (x,_,_,_) = x
+>                           in  ((concat (map q xs),Nothing,Nothing,Nothing),
+>                                all p xs)
+>            e'' = cApply 17 e args
+>            e'   = (if isNothing mClock && isNothing mReset && isNothing mPower
+>                            then e''
+>                            else cVApply (idChangeSpecialWires (getPosition e''))
+>                                         [mkMaybe mClock,
+>                                          mkMaybe mReset,
+>                                          mkMaybe mPower,
+>                                          e''])
+>        (when (not ok)
+>              (failWithErr (pos, EBadSpecialArgs)))
+>        (pPrimaryWithFields e'
+>         <|> pPrimaryWithBitSel e'
+>         <|> return e')
 
 > pConstructorPrimaryPositionalArgs :: Bool -> SV_Parser [CExpr]
 > pConstructorPrimaryPositionalArgs tagged =
@@ -2298,7 +2320,7 @@ must be bound (no mix and match of eq, decl only, bind with the same attrib).
 >                             | (t1 == idPrimArray) && (hasIdProp t1 IdPParserGenerated)
 >                             = peelPrimArray t2
 >                         peelPrimArray t = t
->                         base_ty = fmap peelPrimArray typ
+>                     base_ty <- fmap peelPrimArray typ
 >                     pSymbol SV_SYM_comma
 >                     stmts' <- (pCommaSep1
 >                                (pImperativeDeclExtraVar decl_atts bind_atts flags base_ty))
@@ -3729,7 +3751,7 @@ PREFIX AND INFIX OPERATORS
 >        pSymbol op <?> "operator"
 >        return $ idAt pos
 
-> type OpTableEntry = (SV_Symbol, Operator SV_Token SV_Parser_State CExpr)
+> type OpTableEntry = (SV_Symbol, Operator SV_Token SV_Parser_State Identity CExpr)
 
 > opPrefix :: SV_Symbol -> (Position -> Id) -> OpTableEntry
 > opPrefix name opId = (name, Prefix (fmap f (pOperatorInto name opId)))
@@ -5250,7 +5272,7 @@ convert attributes to instantiation properties
 >           "inst_name"  -> idP (PPinst_name) name
 >           "hide"  -> jP (PPinst_hide)
 >           "hide_all"  -> jP (PPinst_hide_all)
->           str   -> failWithErr (getPosition value, EBadAttributeName str "an instantiation" allowed)
+>           str   -> failWithErr (pos, EBadAttributeName str "an instantiation" allowed)
 
  bool pair give scope information -- module scope, method pragma
 
@@ -5286,7 +5308,6 @@ convert attributes to instantiation properties
 >                              ["prefix", "ready", "enable", "result", "always_ready", "always_enabled"]
 >                     else -- sub interface
 >                     ["prefix", "always_ready", "always_enabled"]
->
 
 Handle port/parameter attributes associated with module arguments.
 This returns pragmas with empty identifiers.  The identifiers
@@ -5510,7 +5531,7 @@ and eschewing all forms which couldn't possibly have the right type.
 > pSPExprInIf = buildExpressionParser seqpropTable2 pSPTerm
 
 
-> seqpropTable :: OperatorTable SV_Token SV_Parser_State SVA_SP
+> seqpropTable :: OperatorTable SV_Token SV_Parser_State Identity SVA_SP
 > seqpropTable =
 >  [[prefixOpP     SV_SYM_hash_hash  (SVA_SP_DelayU)     AssocLeft],
 >   [binOpP        SV_SYM_hash_hash  (SVA_SP_Delay)      AssocLeft],
@@ -5529,7 +5550,7 @@ and eschewing all forms which couldn't possibly have the right type.
 >   binOpP  sym fun assoc = Infix (do{ pSymbol sym; dr <- pHashDelay; rest <- many pDelaySeq; return (fun dr rest)}) assoc
 >   prefixOpP sym fun assoc = Prefix (do{ pSymbol sym; dr <- pHashDelay; rest <- many pDelaySeq; return (fun dr rest)})
 
-> seqpropTable2 :: OperatorTable SV_Token SV_Parser_State SVA_SP
+> seqpropTable2 :: OperatorTable SV_Token SV_Parser_State Identity SVA_SP
 > seqpropTable2 =
 >  [[prefixOpP     SV_SYM_hash_hash  (SVA_SP_DelayU)     AssocLeft],
 >   [binOpP        SV_SYM_hash_hash  (SVA_SP_Delay)      AssocLeft],
@@ -5570,13 +5591,6 @@ and eschewing all forms which couldn't possibly have the right type.
 >   return (SVA_SP_FirstMatch sq asgns rep)
 
 > pSPItem :: SV_Parser SVA_SP
-> pSPItem =
->  do
->   exp <- pExprSeq
->   rep <- pBoolAbbrev
->   return (SVA_SP_Expr exp rep)
-
-> pMatchItem :: SV_Parser SVA_SP
 > pMatchItem = try $
 >   do
 >    pSymbol SV_SYM_lparen
@@ -5587,351 +5601,5 @@ and eschewing all forms which couldn't possibly have the right type.
 >    return ({-if null asgns then SVA_SP_Parens sq rep
 >                          else-} SVA_SP_Match sq asgns rep)
 
-> pMatchItems :: SV_Parser [[ImperativeStatement]]
-> pMatchItems =
->  do
->   pSymbol SV_SYM_comma
->   let seqMatchFlags = nullImperativeFlags {allowEq = True}
->   pCommaSep (pImperativeDeclOrAssign [] seqMatchFlags False)
-
-> pSPIf :: SV_Parser SVA_SP
-> pSPIf =
->  do
->   pKeyword SV_KW_if
->   e <- pInParens pExprSeq
->   p1 <- pSPExprInIf
->   p2 <- option (Nothing) pSPElse
->   return (SVA_SP_If e p1 p2)
-
-> pSPElse :: SV_Parser (Maybe SVA_SP)
-> pSPElse =
->  do
->   pKeyword SV_KW_else
->   p <- pSPExprInIf
->   return (Just p)
-
-> pBoolAbbrev :: SV_Parser (SVA_REP)
-> pBoolAbbrev =
->   pConsRep
->   <|> pNonConsRep
->   <|> pGotoRep
->   <|> return (SVA_REP_None)
-
-> pConsRep :: SV_Parser SVA_REP
-> pConsRep =
->  do
->   pSymbol SV_SYM_lbracket_star
->   r <- pDelayRange
->   pSymbol SV_SYM_rbracket
->   return (SVA_REP_Cons r)
-
-> pNonConsRep :: SV_Parser SVA_REP
-> pNonConsRep =
->  do
->   pSymbol SV_SYM_lbracket_eq
->   r <- pDelayRange
->   pSymbol SV_SYM_rbracket
->   return (SVA_REP_NonCons r)
-
-> pGotoRep :: SV_Parser SVA_REP
-> pGotoRep =
->  do
->   pSymbol SV_SYM_lbracket_minus_gt
->   r <- pDelayRange
->   pSymbol SV_SYM_rbracket
->   return (SVA_REP_Goto r)
-
-> pHashDelay :: SV_Parser SVA_Delay
-> pHashDelay =
->  SVA_Delay_Const <$> pDelayExpr
->   <|> (do
->         pSymbol SV_SYM_lbracket
->         res <- pDelayRange -- XXX Delay_const should not be allowed here
->         pSymbol SV_SYM_rbracket
->         return res)
-
-> pDelayRange :: SV_Parser SVA_Delay
-> pDelayRange =
->  do
->   e <- pDelayExpr
->   option (SVA_Delay_Const e) (pRangeEnd e)
-
-> pRangeEnd :: CExpr -> SV_Parser SVA_Delay
-> pRangeEnd e =
->  do
->    pSymbol SV_SYM_colon
->    pRangeUnbound <|> pRangeBound
->  where
->   pRangeUnbound = do
->             pDollar
->             return (SVA_Delay_Unbound e)
->   pRangeBound = SVA_Delay_Range e <$> pDelayExpr
-
-SEQUENCES
-
-> pSequence :: Attributes -> ImperativeFlags -> SV_Parser [ImperativeStatement]
-> pSequence atts flags =
->  do
->   pos <- getPos
->   pKeyword SV_KW_sequence <?> "sequence"
->   ignoreAssertions <- disableAssertions <$> getParserFlags
->   when (not ignoreAssertions) (parseWarn (pos, WExperimental "SV assertions"))
->   when (not (allowSequence flags))
->        (failWithErr (pos, EForbiddenSequenceDecl (pvpString (stmtContext flags)) ""))
->   assertEmptyAttributes EAttribsSequence atts
->   name <- pIdentifier <?> "sequence name"
->   args <- option [] (pInParens (pCommaSep pFunctionArgOptType)) <?> "sequence arguments"
->   context <- option [] pProvisos
->   pSemi
->   let seqMatchFlags = nullImperativeFlags {allowAssertVar = True}
->   vars <- many (try (pImperativeDeclOrAssignSemi [] seqMatchFlags))
->   body <- pSPExpr
->   pSemi
->   pEndClause SV_KW_endsequence (Just name)
->   pFlags <- getParserFlags
->   let res = if (disableAssertions pFlags)
->              then [ISDecl pos (Right name) Nothing []]
->              else [ISSequence pos (name, args, context, vars, body)]
->   return res
-
-PROPERTIES
-
-> pProperty :: Attributes -> ImperativeFlags -> SV_Parser [ImperativeStatement]
-> pProperty atts flags =
->  do
->   pos <- getPos
->   pKeyword SV_KW_property <?> "property declaration"
->   ignoreAssertions <- disableAssertions <$> getParserFlags
->   when (not ignoreAssertions) (parseWarn (pos, WExperimental "SV assertions"))
->   when (not (allowProperty flags))
->        (failWithErr (pos, EForbiddenPropertyDecl (pvpString (stmtContext flags)) ""))
->   assertEmptyAttributes EAttribsProperty atts
->   name <- pIdentifier <?> "property name"
->   args <- option [] (pInParens (pCommaSep pFunctionArgOptType)) <?> "property arguments"
->   context <- option [] pProvisos
->   pSemi
->   let seqMatchFlags = nullImperativeFlags {allowAssertVar = True}
->   vars <- option [] (try (many1 (try (pImperativeDeclOrAssignSemi [] seqMatchFlags))))
->   body <- pSPExpr
->   pSemi
->   pEndClause SV_KW_endproperty (Just name)
->   pFlags <- getParserFlags
->   let res = if (disableAssertions pFlags)
->              then [ISDecl pos (Right name) Nothing []]
->              else [ISProperty pos (name, args, context, vars, body)]
->   return res
-
-ASSERTIONS
-
-> pAssertion :: Attributes -> ImperativeFlags -> SV_Parser [ImperativeStatement]
-> pAssertion atts flags = pAssertion1 Nothing atts flags
-
-> pAssertionWithLabel :: Attributes -> ImperativeFlags -> SV_Parser [ImperativeStatement]
-> pAssertionWithLabel atts flags =
->  do
->    pos <- getPos
->    label <- try (do
->                   id <- pIdentifier
->                   pColon
->                   return id)
->    let ctxt = stmtContext flags
->    if (ctxt == ISCSequence) then (pImperativeLabel pos label atts flags) else (pAssertion1 (Just label) atts flags)
-
-> pAssertion1 :: (Maybe Id) -> Attributes -> ImperativeFlags -> SV_Parser [ImperativeStatement]
-> pAssertion1 mid atts flags =
->  do
->    pos <- getPos
->    always <- option (True) (pInitialStmt <|> pAlwaysStmt)
->    st <- pAssertStmt mid atts flags <?> "assertion statement"
->    pFlags <- getParserFlags
->    let res = if (disableAssertions pFlags)
->              then []
->              else [ISAssertStmt pos (always, st)]
->    return res
-
-> pInitialStmt :: SV_Parser Bool
-> pInitialStmt =
->  do
->    pKeyword SV_KW_initial
->    return False
-
-> pAlwaysStmt :: SV_Parser Bool
-> pAlwaysStmt =
->  do
->    pKeyword SV_KW_always
->    return True
-
-> pAssertStmt :: Maybe Id -> Attributes -> ImperativeFlags -> SV_Parser SVA_STMT
-> pAssertStmt mid atts flags =
->    pAssert mid atts flags
->    <|> pAssume mid atts flags
->    <|> pCover mid atts flags
->    <|> pExpect mid atts flags
-
-> pAssert :: Maybe Id -> Attributes -> ImperativeFlags -> SV_Parser SVA_STMT
-> pAssert mid atts flags =
->  do
->    pos <- getPos
->    pKeyword SV_KW_assert
->    when (not (allowAssert flags))
->        (failWithErr (pos, EForbiddenAssert (pvpString (stmtContext flags))))
->    ignoreAssertions <- disableAssertions <$> getParserFlags
->    when (not ignoreAssertions) (parseWarn (pos, WExperimental "SV assertions"))
->    assertEmptyAttributes EAttribsAssert atts
->    pKeyword SV_KW_property
->    prop <- pInParens pSPExpr
->    (pass, fail) <- do {pSemi; return ([],[])}
->                    <|> pNakedElse flags
->                   <|> pPassThrough flags
->    return (SVA_STMT_Assert mid prop pass fail)
-
-> pAssume :: Maybe Id -> Attributes -> ImperativeFlags -> SV_Parser SVA_STMT
-> pAssume mid atts flags =
->  do
->    pos <- getPos
->    pKeyword SV_KW_assume
->    when (not (allowAssume flags))
->        (failWithErr (pos, EForbiddenAssume (pvpString (stmtContext flags))))
->    ignoreAssertions <- disableAssertions <$>  getParserFlags
->    when (not ignoreAssertions) (parseWarn (pos, WExperimental "SV assertions"))
->    assertEmptyAttributes EAttribsAssume atts
->    pKeyword SV_KW_property
->    prop <- pInParens pSPExpr
->    pSemi
->    return (SVA_STMT_Assume mid prop)
-
-> pCover :: Maybe Id -> Attributes -> ImperativeFlags -> SV_Parser SVA_STMT
-> pCover mid atts flags =
->   do
->     pos <- getPos
->     pKeyword SV_KW_cover
->     when (not (allowCover flags))
->        (failWithErr (pos, EForbiddenCover (pvpString (stmtContext flags))))
->     ignoreAssertions <- disableAssertions <$> getParserFlags
->     when (not ignoreAssertions)
->              (parseWarn (pos, WExperimental "SV assertions"))
->     assertEmptyAttributes EAttribsCover atts
->     pKeyword SV_KW_property
->     prop <- pInParens pSPExpr
->     pass <- do {pSemi; return []}
->             <|> pImperativeStmt assertFlags
->     return (SVA_STMT_Cover mid prop pass)
-
-> pExpect :: Maybe Id -> Attributes -> ImperativeFlags -> SV_Parser SVA_STMT
-> pExpect mid atts flags =
->   do
->     pos <- getPos
->     pKeyword SV_KW_expect
->     when (not (allowExpect flags))
->        (failWithErr (pos, EForbiddenExpect (pvpString (stmtContext flags))))
->     ignoreAssertions <- disableAssertions <$> getParserFlags
->     when (not ignoreAssertions)
->              (parseWarn (pos, WExperimental "SV assertions"))
->     assertEmptyAttributes EAttribsExpect atts
->     prop <- pInParens pSPExpr
->     (pass, fail) <- do {pSemi; return ([], [])}
->                    <|> pNakedElse flags
->                   <|> pPassThrough flags
->     return (SVA_STMT_Expect mid prop pass fail)
-
-> pNakedElse :: ImperativeFlags
->            -> SV_Parser ([ImperativeStatement],[ImperativeStatement])
-> pNakedElse flags =
->  do
->    pKeyword SV_KW_else
->    f <- pImperativeStmt assertFlags
->    return ([], f)
->
-> pPassThrough :: ImperativeFlags
->              -> SV_Parser ([ImperativeStatement],[ImperativeStatement])
-> pPassThrough flags =
->  do
->    p <- pImperativeStmt actionFlags
->    f <- option [] (pKeyword SV_KW_else >> pImperativeStmt actionFlags)
->    return (p, f)
-
-> assertFlags :: ImperativeFlags
-> assertFlags = nullImperativeFlags
->  {
->   stmtContext = ISCExpression,
->   allowEq = True,
->   allowSubscriptAssign = True,
->   allowFieldAssign = True,
->   allowArrayDecl = True,
->   allowBind = True,
->   allowLoops = True,
->   allowConditionals = True,
->   allowNakedExpr = True,
->   allowLet = True
->  }
-
-=========
-
-UTILITIES
-
-get current "Position"
-
-> getPos :: SV_Parser Position
-> getPos = Parsec.getPosition
-
-parse tokens into CSyntax
-
-> bsvParseTokens :: ErrorHandle -> Flags ->
->                   Bool -> String -> String -> [SV_Token] ->
->                   IO CPackage
-> bsvParseTokens errh flags show_warns filename defaultPkgName tokens =
->     do let initPos | null tokens = initialPosition filename
->                    | otherwise = start_position (head tokens)
->        result <- runParser (pPackageWithWarnings defaultPkgName)
->                  (emptyParserState errh flags) initPos tokens
->        case result of
->          Left  errs         -> bsError errh errs
->          Right (pkg, warns) -> do when (not (null warns) && show_warns) $
->                                       bsWarning errh warns
->                                   return pkg
-
-tokenize and parse string into CSyntax
-
-> bsvParseString :: ErrorHandle -> Flags ->
->                   Bool -> String -> String -> String ->
->                   IO (CPackage, TimeInfo)
-> bsvParseString errh flags show_warns filename defaultPkgName source =
->     do
->       let initpos =
->               updatePosStdlib (initialPosition filename) (stdlibNames flags)
->       t <- getNow
->       start flags DFvpp
->       vppOut@(ppsource, includes)  <- preprocess errh flags initpos source
->       let dumpnames = (baseName (dropSuf filename), "", "")
->       t <- dump errh flags t DFvpp dumpnames (VPPOut vppOut)
->       when ( preprocessOnly flags ) $ do putStrLn ppsource
->                                          exitOK errh
->
->       start flags DFbsvlex
->       let tokens = scan initpos ppsource
->       t <- dump errh flags t DFbsvlex dumpnames tokens
-
-parsing is done after we return
-
->       start flags DFparsed
->       (CPackage name exports imports fixs defs _)
->            <- bsvParseTokens errh flags show_warns filename defaultPkgName tokens
->       let package = (CPackage name exports imports fixs defs (map CInclude includes))
->       t <- vdump errh flags t DFparsed dumpnames package
->       return (package, t)
-
-wrapper function to allow parsing from TCL for a specific type
-XXX should fixup positions here
-
-> pStringWrapper :: ErrorHandle -> Flags ->
->                   (SV_Parser a) -> [String]  -> IO (Either [EMsg] a)
-> pStringWrapper errh flags pf srcs = do
->   let initPos = initialPosition "Commandline"
->       tokens = scan initPos (unwords srcs)
->   runParser wrapped (emptyParserState errh flags) initPos tokens
->       where -- wrapped :: (SV_Parser a)
->             wrapped = do
->                       res <- pf
->                       eof svTokenToString
->                       return res
->
+> failWithErr :: EMsg -> SV_Parser a
+> failWithErr err = failWithErrs [err]

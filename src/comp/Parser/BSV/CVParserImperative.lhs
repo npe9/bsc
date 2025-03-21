@@ -9,10 +9,10 @@
 > import qualified Data.Set as S
 > import qualified Data.Map as M
 
-> import Parsec hiding (getPosition)
+> import Text.Parsec hiding (getPosition)
 
 > import Parser.BSV.CVParserCommon
-> import Parser.BSV.CVParserAssertion
+> import qualified Parser.BSV.CVParserAssertion as Assertion
 > import Parser.BSV.CVParserUtil
 > import CSyntax
 > import CSyntaxUtil
@@ -278,12 +278,12 @@ instances.
 >          Nothing    -> cvtErr pos (EBadStructUpdate ("1:"++pvpString struct))
 >          Just (_,f) -> f expr (convImperativeStmtsToCExpr blockPos flags atEnd rest) cLetSeq
 
-> convImperativeStmtsToCExpr blockPos flags True ([ISBeginEnd pos stmts]) =
+> convImperativeStmtsToCExpr blockPos flags atEnd [ISBeginEnd pos stmts] =
 >     do pushState
 >        let newFlags = flags { stmtContext = ISCExpression,
->                               endKeyword = Just "end" }
+>                             endKeyword = Just "end" }
 >        expr <- (checkImperativeStmts ISCExpression stmts
->                 >>= convImperativeStmtsToCExpr pos newFlags True)
+>                >>= convImperativeStmtsToCExpr pos newFlags True)
 >        popState
 >        return expr
 
@@ -943,15 +943,14 @@ endfunction
 >    else
 >     do pushState
 >        let rightHandSides = concat ([conseq | (pos, tests, conseq) <- arms]
->                                     ++ [conseq | (pos, conseq)
->                                                  <- maybeToList dfltArm])
+>                                     ++ [conseq | (pos, conseq) <- maybeToList dfltArm])
 >            updatedVars = S.toList (getUFVISs rightHandSides)
 >            resultExpr = mkTuple casePos $ map CVar updatedVars
 >            convArm (armPos, tests, conseq) =
 >                do pushState
 >                   let conseqPos = getListPosWithDefault conseq armPos
 >                   checkedConseq <- checkImperativeStmts context
->                                    (conseq ++ [ISReturn conseqPos (Just resultExpr)])
+>                                    (conseq ++ [ISNakedExpr conseqPos resultExpr])
 >                   conseqCStmts <- convImperativeStmtsToCStmts c_mt_me atEnd
 >                                   checkedConseq
 >                   let conseqExpr = Cdo False conseqCStmts
@@ -1136,8 +1135,8 @@ endfunction
 >     do body <- convImperativeStmtsToCStmts c_mt_me atEnd rest
 >        return (CSExpr Nothing (CBinOp reg (mkId pos fsAssign) expr) : body)
 
-> convImperativeStmtsToCStmts  c_mt_me@(context,_,_) atEnd all@(ISNakedExpr pos expr : rest)
->                              | (isModuleContext context) =
+> convImperativeStmtsToCStmts  c_mt_me atEnd all@(ISNakedExpr pos expr : rest)
+>                              | (isModuleContext (fst3 c_mt_me)) =
 >     let getIdDef (CApply (CVar id_def) _) =  if (getIdBase id_def /= fsF) then (Just id_def) else Nothing
 >         getIdDef (CVar id_def)            =  if (getIdBase id_def /= fsF) then (Just id_def) else Nothing
 >         getIdDef _                        =  Nothing
@@ -1224,7 +1223,7 @@ endfunction
 >            isArg _ = False
 >            isSchedule (ISBVI _ (BVI_schedule _)) = True
 >            isSchedule _ = False
->            isPath (ISBVI _ (BVI_path _)) = True
+>            isPath (ISBVI _ (BVA_path _)) = True
 >            isPath _ = False
 >            isUnsync (ISBVI _ (BVI_unsync _)) = True
 >            isUnsync _ = False
@@ -1523,7 +1522,7 @@ Extract each type of statement, making sure to preserve the order
 >            schedules = [ (p, s) | (ISBVI p (BVI_schedule s)) <- bvi_schedules ]
 >
 >            (bvi_paths, bvis12) = partition isPath bvis11
->            paths = [ p | (ISBVI _ (BVI_path p)) <- bvi_paths ]
+>            paths = [ p | (ISBVI _ (BVA_path p)) <- bvi_paths ]
 >
 >            (bvi_unsyncs, bvis13) = partition isUnsync bvis12
 >            unsyncs = [ u | (ISBVI _ (BVI_unsync u)) <- bvi_unsyncs ]
@@ -1945,7 +1944,7 @@ Extract each type of statement, making sure to preserve the order
 >    mapM_ (addParam pos) params
 >    vs <- mapM (mapM (checkImperativeStmt miInvalid)) vardecls
 >    -- let vars' = map concat vs
->    checkRecursionSP [nm] body
+>    Assertion.checkRecursionSP [nm] body
 >    bChecked <- checkSPBody body
 >    convImperativeStmtsToCStmts context atEnd rest
 > convImperativeStmtsToCStmts context atEnd stmts@(ISProperty pos prop : rest) =
@@ -1955,7 +1954,7 @@ Extract each type of statement, making sure to preserve the order
 >    mapM_ (addParam pos) params
 >    vs <- mapM (mapM (checkImperativeStmt miInvalid)) vardecls
 >    --  let vars' = map concat vs
->    checkRecursionSP [nm] body
+>    Assertion.checkRecursionSP [nm] body
 >    bChecked <- checkSPBody body
 >    convImperativeStmtsToCStmts context atEnd rest
 > convImperativeStmtsToCStmts context@(ctxt,_,_) atEnd stmts@(ISAssertStmt pos as : rest) =
@@ -1963,7 +1962,7 @@ Extract each type of statement, making sure to preserve the order
 >     let (bl, body) = as
 >     setupAssertFunctions
 >     bChecked <- checkAssertBody body
->     new <- transAssertStmt pos (bl, bChecked)
+>     new <- Assertion.transAssertStmt pos (bl, bChecked)
 >--     traceM "Before Checking"
 >--     traceM "======================="
 >--     traceM $ unlines (map show new)
@@ -2263,7 +2262,7 @@ to uniquify them.
 >              return (map CMStmt stmts' ++ [CMinterface ifc])
 >          e@(CSExpr Nothing _) ->
 >              return (map CMStmt (stmts' ++ [e]))
->          x -> failWithErr (getPosition x, EBadInterface)
+>          x -> failWithErrs [(getPosition x, EBadInterface)]
 >       -- XXX make above errors "internal"?
 
 > imperativeToCDefns ::  [ImperativeStatement] -> SV_Parser [CDefn]
@@ -2456,7 +2455,7 @@ Check for use of unassigned variables; if any are found, report errors
 > detectUndeclaredProperty :: Id -> ISConvMonad ()
 > detectUndeclaredProperty var =
 >  do
->    declared <- isProperty var
+>    declared <- Assertion.isProperty var
 >    when (not declared) (detectUndeclaredSequence var)
 
 > detectUndeclaredProperties :: CExpr -> ISConvMonad ()
@@ -2469,8 +2468,8 @@ Check for use of unassigned variables; if any are found, report errors
 > detectUndeclaredAll var =
 >  do
 >     dec <- isDeclared var
->     seq <- isSequence var
->     prop <- isProperty var
+>     seq <- Assertion.isSequence var
+>     prop <- Assertion.isProperty var
 >     return ()
 >     --when (not dec && not seq && not prop)
 >     --            (cvtErr (getIdPosition var) (EUnboundVar (pvpString var)))
@@ -2481,7 +2480,7 @@ Check for use of unassigned variables; if any are found, report errors
 > detectUndeclaredSequence :: Id -> ISConvMonad ()
 > detectUndeclaredSequence var =
 >  do
->    declared <- isSequence var
+>    declared <- Assertion.isSequence var
 >    when (not declared) (detectUndeclaredVarOrFunction var)
 
 > warnShadowClause :: CClause -> ISConvMonad ()
@@ -2872,11 +2871,11 @@ ASSERTIONS
 > -- The rest will be done in convImperativeStmtToCStmt
 > checkImperativeStmt mi stmt@(ISSequence _ (nm, _,_,_,_)) =
 >     do
->        addSequence nm stmt
+>        Assertion.addSequence nm stmt
 >        return [stmt]
 > checkImperativeStmt mi stmt@(ISProperty pos (nm, _,_,_,_)) =
 >     do
->        addProperty nm stmt
+>        Assertion.addProperty nm stmt
 >        return [stmt]
 > checkImperativeStmt mi stmt@(ISAssertStmt pos (bl, body)) =
 
