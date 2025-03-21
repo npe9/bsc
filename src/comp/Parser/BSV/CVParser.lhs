@@ -1723,34 +1723,37 @@ EXPRESSIONS
 >       <|>
 >       (do name <- pQualConstructor
 >           pConstructorPrimaryWith name False))
-
+> {-# LANGUAGE BlockArguments #-}
+> 
+> module CVParser where
+> 
+> -- | 'pConstructorPrimaryWith' parses a constructor primary with optional field or port list arguments.
 > pConstructorPrimaryWith :: Id -> Bool -> SV_Parser CExpr
 > pConstructorPrimaryWith name tagged =
->         do namedArgs <- pInBraces (pCommaSep pFieldInit)
->            return $ CStruct (Just (not tagged)) name namedArgs
->     <|> do pos <- getPos
->        amcmrmps <- many1 pPortListArgs
->        let ((args, mClock, mReset, mPower),ok) =
->              case amcmrmps of
->                    [x] -> (x,True)
->                    xs  -> let p(_,Nothing,Nothing,Nothing) = True
->                               p _ = False
->                               q (x,_,_,_) = x
->                           in  ((concat (map q xs),Nothing,Nothing,Nothing),
->                                all p xs)
->            e'' = cApply 17 e args
->            e'   = (if isNothing mClock && isNothing mReset && isNothing mPower
->                            then e''
->                            else cVApply (idChangeSpecialWires (getPosition e''))
->                                         [mkMaybe mClock,
->                                          mkMaybe mReset,
->                                          mkMaybe mPower,
->                                          e''])
->        (when (not ok)
->              (failWithErr (pos, EBadSpecialArgs)))
->        (pPrimaryWithFields e'
->         <|> pPrimaryWithBitSel e'
->         <|> return e')
+>     (do
+>          namedArgs <- pInBraces (pCommaSep pFieldInit)
+>          return $ CStruct (Just (not tagged)) name namedArgs)
+>     <|>
+>     do
+>          pos <- getPos
+>          amcmrmps <- many1 pPortListArgs
+>          let ((args, mClock, mReset, mPower), ok) =
+>                  case amcmrmps of
+>                      [x] -> (x, True)
+>                      xs  -> let p (_, Nothing, Nothing, Nothing) = True
+>                                 p _ = False
+>                                 q (x, _, _, _) = x
+>                             in  ((concat (map q xs), Nothing, Nothing, Nothing),
+>                                  all p xs)
+>              e'' = cApply 17 e args
+>              e'  = if isNothing mClock && isNothing mReset && isNothing mPower
+>                    then e''
+>                    else cVApply (idChangeSpecialWires (getPosition e''))
+>                               [mkMaybe mClock, mkMaybe mReset, mkMaybe mPower, e'']
+>          when (not ok) (failWithErr (pos, EBadSpecialArgs))
+>          pPrimaryWithFields e'
+>              <|> pPrimaryWithBitSel e'
+>              <|> return e'
 
 > pConstructorPrimaryPositionalArgs :: Bool -> SV_Parser [CExpr]
 > pConstructorPrimaryPositionalArgs tagged =
