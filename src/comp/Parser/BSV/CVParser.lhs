@@ -1723,10 +1723,7 @@ EXPRESSIONS
 >       <|>
 >       (do name <- pQualConstructor
 >           pConstructorPrimaryWith name False))
-> {-# LANGUAGE BlockArguments #-}
-> 
-> module CVParser where
-> 
+
 > -- | 'pConstructorPrimaryWith' parses a constructor primary with optional field or port list arguments.
 > pConstructorPrimaryWith :: Id -> Bool -> SV_Parser CExpr
 > pConstructorPrimaryWith name tagged =
@@ -5582,7 +5579,7 @@ and eschewing all forms which couldn't possibly have the right type.
 >    pMatchItem
 >    <|> pFirstMatch
 >    <|> pSPIf
->    <|> try pSPItem
+>    <|> try pMatchItem
 >    <|> pInParens pSPExpr
 
 > pFirstMatch :: SV_Parser SVA_SP
@@ -5594,6 +5591,13 @@ and eschewing all forms which couldn't possibly have the right type.
 >   return (SVA_SP_FirstMatch sq asgns rep)
 
 > pSPItem :: SV_Parser SVA_SP
+> pSPItem =
+>  do
+>   exp <- pExprSeq
+>   rep <- pBoolAbbrev
+>   return (SVA_SP_Expr exp rep)
+
+> pMatchItem :: SV_Parser SVA_SP
 > pMatchItem = try $
 >   do
 >    pSymbol SV_SYM_lparen

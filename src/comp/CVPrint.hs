@@ -512,150 +512,82 @@ ppStrUpd d e ies =
 instance PVPrint CExpr where
     pvPrint d p (CLam i e) = ppQuant "\\ "  d p i e
     pvPrint d p (CLamT i ty e) = ppQuant "\\ "  d p i e
-    pvPrint d p (Cletrec [] e) = pparen (p > 0) $
-        (t"/* empty letseq */" $+$ pp d e)
-    --pvPrint d p (Cletrec ds e) = pparen (p > 0) $
-    --        (t"let" <+> foldr1 ($+$) (map (pp d) ds)) $+$
-    --  (t"in  " <> pp d e)
+    pvPrint d p (Cletrec [] e) = pvparen (p > 0) $
+        (text "/* empty letseq */" $+$ pvPrint d 0 e)
     pvPrint d p (Cletrec ds e) =
-        t "/* letrec */" $+$
-        if (p>1) then t"(begin" <+> ppLet <>t";"$+$ t"end)"
-                 else if (p==1) then t"begin" <+> ppLet <>t";"$+$ t"end"
-                 else ppLet
-          where ppLet = ((foldr1 ($+$) (map (pp d) ds)) $+$ pparen True (pp d e))
-    pvPrint d p (Cletseq [] e) = pparen (p > 0) $
-        (t"let in" <+> pp d e)
-    --pvPrint d p (Cletrec ds e) = pparen (p > 0) $
-    --        (t"let" <+> foldr1 ($+$) (map (pp d) ds)) $+$
-    --  (t"in  " <> pp d e)
+        pvparen (p>maxPrec) ppLet
+          where ppLet = ((foldr1 ($+$) (map (pvPrint d 0) ds)) $+$ pvparen True (pvPrint d 0 e))
+    pvPrint d p (Cletseq [] e) = pvparen (p > 0) $
+        (text "let in" <+> pvPrint d 0 e)
     pvPrint d p (Cletseq ds e) =
-        if (p>1) then t"(begin" <+> ppLet <>t";"$+$ t"end)"
-                 else if (p==1) then t"begin" <+> ppLet <>t";"$+$ t"end"
+        if (p>1) then text "(begin" <+> ppLet <> text ";" $+$ text "end)"
+                 else if (p==1) then text "begin" <+> ppLet <> text ";" $+$ text "end"
                  else ppLet
-          where ppLet = ((foldr1 ($+$) (map (pp d) ds)) $+$ pparen True (pp d e))
-    -- undo ._read desugaring
-    pvPrint d p (CSelect e i) | i `qualEq` id_read noPosition = pvPrint d p e
-    pvPrint d p (CSelect e i) = pparen (p > (maxPrec+2)) $ pvPrint d (maxPrec+2) e <> t"." <> pvpId d i
-
---    pvPrint d p (CCon i es) = pparen (p>(maxPrec-1)) $
---        pvpId d i <> t"{" (sepList (map (pp d) es) (t",") ) <> t"}"
---    pvPrint d p (CCon i es) =  pvPrint d p (cVApply i es)
-    pvPrint d p (CCon i [p2@(CCon i' _)])|
-          getIdString i /= "," && getIdString i' == "," =
-       pparen (p>(maxPrec-1)) $ (pvpId d i)<+> pparen True (pp d p2)
-    pvPrint d p (CCon i [p2@(CBinOp _ i' _)])|
-          getIdString i /= "," && getIdString i' == "," =
-       pparen (p>(maxPrec-1)) $ (pvpId d i)<+> pparen True (pp d p2)
-    pvPrint d p (CCon i []) = pvpId d i
-    pvPrint d p (CCon i as) | getIdString i == "," = ppTuple d as
-    pvPrint d p (CCon i as) =
-     pparen (p>(maxPrec-1)) $
-       (pvpId d i) <+> pparen True (sepList(map (pvPrint d 1) as) (t","))
-
+          where ppLet = ((foldr1 ($+$) (map (pvPrint d 0) ds)) $+$ pvparen True (pvPrint d 0 e))
+    pvPrint d p (CSelect e i) = pvparen (p>maxPrec) $ pvPrint d 0 e <> text "." <> pvpId d i
+    pvPrint d p (CCon i es) = pvparen (p>maxPrec) $ sep (pvpId d i : map (pvPrint d maxPrec) es)
+    pvPrint d p (CConT t i es) = pvparen (p>(maxPrec-1)) $ sep (pvpId d i : map (pvPrint d maxPrec) es)
     pvPrint d p (Ccase pos e arms) =
-        if (p>1) then t"(begin" <+> ppCase d e arms $+$ t"end)"
-                 else if (p==1) then t"begin" <+> ppCase d e arms $+$ t"end"
+        if (p>1) then text "(begin" <+> ppCase d e arms $+$ text "end)"
+                 else if (p==1) then text "begin" <+> ppCase d e arms $+$ text "end"
                  else ppCase d e arms
     pvPrint d p (CAny {}) = text "?"
     pvPrint d p (CVar i) = pvpId d i
     pvPrint d p (CStruct _ tyc []) | tyc == idPrimUnit = text "()"
     pvPrint d p (CStruct mb tyc ies) =
-      pparen (p > 0) $
-          mtagged <+> pvPrint d (maxPrec+1) tyc <+> t "{" <+> sepList (map f ies ) (t",") <> t"}"
-        where f (i, e) = pvpId d i <+> t ":" <+> pp d e
+      pvparen (p > 0) $
+          mtagged <+> pvPrint d (maxPrec+1) tyc <+> text "{" <+> sepList (map f ies ) (text ",") <> text "}"
+        where f (i, e) = pvpId d i <+> text ":" <+> pvPrint d 0 e
               mtagged = case mb of
                           Just False -> text "tagged"
                           _ -> empty
     pvPrint d p (CStructUpd e ies) = ppStrUpd d e ies
---        sep (pvPrint d (maxPrec-1) e : map (nest 2 . ppApArg) es)
---      where ppApArg e = pvPrint d maxPrec e
-    pvPrint d p (Cwrite pos e v)  = pparen (p > 0) $ pvPrint d (maxPrec+1) e <+> t "<=" <+> pvPrint d p v
+    pvPrint d p (Cwrite pos e v)  = pvparen (p > 0) $ pvPrint d (maxPrec+1) e <+> text "<=" <+> pvPrint d p v
     pvPrint d p (CApply (CVar i) [pos, v, idx]) | i == idPrimSelectFn noPosition =
       pvPrint d p (CSub (getPosition pos) v idx)
     pvPrint d p (CApply (CVar i) [CHasType (CVar _) (CQType [] (TAp (TCon _) ty))])
         | getIdBaseString i == "primValueOf"
-      = pparen (p>(maxPrec-1)) $ t"valueOf" <> pparen True (pp d ty)
-
-    pvPrint d p (CApply (CVar i)
-                 [CHasType the_lit@(CLit (CLiteral _
-                                          ( LInt (IntLit w b v))))
-                  (CQType [] (TAp (TCon (TyCon i2 _ _)) (TCon (TyNum nTy _))))])
-          | getIdBaseString i == "unpack" && getIdBaseString i2 == "Bit"
-      = (t $ show nTy) <> (pp d the_lit)
-
-    pvPrint d p (CApply e@(CVar _) es) = pparen (p>(maxPrec-1)) $
-        pp d e <> pparen True (sepList (map (pvPrint d 1) es) (t",") )
-    pvPrint d p (CApply e es) = pparen (p>(maxPrec-1)) $
-        pparen True (pp d e) <> pparen True (sepList (map (pvPrint d 1) es) (t",") )
-    pvPrint d p (CTaskApply e es) = pparen (p>(maxPrec-1)) $
-        pp d e <> pparen True (sepList (map (pvPrint d 1) es) (t",") )
-    pvPrint d p (CTaskApplyT e tt es) = pparen (p>(maxPrec-1)) $
-        pp d e <> pparen True (sepList (map (pvPrint d 1) es) (t",") )
+      = pvparen (p>(maxPrec-1)) $ text "valueOf" <> pvparen True (pvPrint d 0 ty)
+    pvPrint d p (CApply e@(CVar _) es) = pvparen (p>(maxPrec-1)) $
+        pvPrint d 0 e <> pvparen True (sepList (map (pvPrint d 1) es) (text ",") )
+    pvPrint d p (CApply e es) = pvparen (p>(maxPrec-1)) $
+        pvparen True (pvPrint d 0 e) <> pvparen True (sepList (map (pvPrint d 1) es) (text ",") )
+    pvPrint d p (CTaskApply e es) = pvparen (p>(maxPrec-1)) $
+        pvPrint d 0 e <> pvparen True (sepList (map (pvPrint d 1) es) (text ",") )
+    pvPrint d p (CTaskApplyT e tt es) = pvparen (p>(maxPrec-1)) $
+        pvPrint d 0 e <> pvparen True (sepList (map (pvPrint d 1) es) (text ",") )
     pvPrint d p (CLit l) = pvPrint d p l
     pvPrint d p (CBinOp e1 i e2) = ppOp d p i e1 e2
-    pvPrint d p (CHasType e t) = pparen (p>0) $
-        pvPrint d maxPrec t <> text "'" <> (pparen True $ pp d e)
-    pvPrint d p (Cif pos c tr e) = pparen (p>0) (sep [pvPrint d 1 c <+> t "?", nest 4 (pvPrint d 1 tr), t":", nest 4 (pvPrint d 1 e)])
-    pvPrint d p (CSub pos e s) = pvPrint d maxPrec e <> t"[" <> pp d s <> t"]"
-    pvPrint d p (CSub2 e h l) = pvPrint d maxPrec e <> t"[" <> pp d h <> t":" <> pp d l <> t"]"
-    -- XXX not valid BSV
-    pvPrint d p (CSubUpdate pos e_vec (e_h, e_l) e_rhs) = pvPrint d p (CSub2 e_vec e_h e_l) <> t"=" <> pvPrint d p e_rhs
-    pvPrint d p (Cmodule _ is) =
-     t"module " $+$ pBlock d 2 False (map (pp d) (reorderStmts is)) empty (t"endmodule")
---  pvPrint d p (Cinterface Nothing ds) =
---        (t"interface {" $+$ pBlock d 2 False (map (pp d) ds) (t";") (t"}"))
-    pvPrint d p (Cinterface pos Nothing ds) =
-        (pBlockNT d 0 False (map (ppM d) ds) empty)
---    pvPrint d p (CLValueSign def me) = optWhen d me $ pvPrint d p def
-    pvPrint d p (Cinterface pos (Just i) ds) =
-        (t"interface" <+> pp d i) $+$
-        (pBlock d 2 False (map (ppM d) ds)  empty (t"endinterface:" <+> pp d i))
-    pvPrint d p (CmoduleVerilog m ui c r ses fs sch ps) =
-        sep [
-          t"(unexpected) module verilog" <+> pp d m <> t";",
-          (if c==(ClockInfo [][][][]) then empty else pPrint d p c),
-          (if r==(ResetInfo [][]) then empty else pPrint d p r),
-          nest 4 (if null ses then empty else pparen True (sepList (map ppA ses) (t","))),
-          nest 4 (t"{" $+$ pBlock d 2 False (map (ppVeriMethod d Nothing) fs) (t";") (t"}")),
-          nest 4 (pp d sch),
-          nest 4 (pp d ps) ]
-          where ppA (s, e) = text "(" <> text (show s) <> text "," <+> pp d e <> text ")"
-    pvPrint d p (CForeignFuncC i wrap_ty) =
-        t"(unexpected) ForeignFuncC" <+> pp d i
-    pvPrint d p (Cdo _ ss) = pparen (p>0) $ t "actionvalue" $+$ nest 2 (ppActions d ss True) $+$ t "endactionvalue"
-    pvPrint d p (Caction _ ss) = pparen (p>0) $ ppActions d ss False
-    pvPrint d p (Crules ps rs) = ppRules d p ps rs False
-    ----
-    pvPrint d p (COper []) = empty
-    pvPrint d p (COper [(CRand p1)]) = pvPrint d p p1
-    pvPrint d p (COper [(CRand p1), (CRator _ i), (CRand p2)])
-      = ppOp d p i p1 p2
-    pvPrint d p (COper ops) =
-      let (ys,zs,i) = findSpecialOps ops
-      in if (null zs) then pparen (p > maxPrec-1) (sep (map (pvPrint d (maxPrec-1)) ys))
-         else ppOp d p i (COper ys) (COper zs)
-    ----
-    pvPrint d p (CCon1 _ i e) = pvPrint d p (CCon i [e])
-    pvPrint d p (CSelectTT _ e i) = pvPrint d p (CSelect e i)
-    ----
-    pvPrint d p (CCon0 _ i) = pvpId d i
-    ----
-    pvPrint d p (CConT _ i es) = pvPrint d p (CCon i es)
+    pvPrint d p (CHasType e t) = pvparen (p>0) $
+        pvPrint d maxPrec t <> text "'" <> (pvparen True $ pvPrint d 0 e)
+    pvPrint d p (Cif pos c tr e) = pvparen (p>0) (sep [pvPrint d 1 c <+> text "?", nest 4 (pvPrint d 1 tr), text ":", nest 4 (pvPrint d 1 e)])
+    pvPrint d p (CSub pos e s) = pvPrint d maxPrec e <> text "[" <> pvPrint d 0 s <> text "]"
+    pvPrint d p (CSub2 e h l) = pvPrint d maxPrec e <> text "[" <> pvPrint d 0 h <> text ":" <> pvPrint d 0 l <> text "]"
+    pvPrint d p (CSubUpdate pos e_vec (e_h, e_l) e_rhs) = pvPrint d p (CSub2 e_vec e_h e_l) <> text "=" <> pvPrint d p e_rhs
+    pvPrint d p (Cmodule pos is) = text "module" <+> pvPrint d p is
+    pvPrint d p (Cinterface pos mi ds) = text "interface" <+> pvPrint d p ds
+    pvPrint d p (CmoduleVerilog m ui c r ses fs sch ps) = text "module" <+> pvPrint d p m
+    pvPrint d p (CForeignFuncC i wty) = text "foreign" <+> pvpId d i <+> text "::" <+> pvPrint d p wty
+    pvPrint d p (Cdo r ss) = text "do" <+> pvPrint d p ss
+    pvPrint d p (Caction pos ss) = text "action" <+> pvPrint d p ss
+    pvPrint d p (Crules ps rs) = text "rules" <+> pvPrint d p rs
+    pvPrint d p (CTApply e ts) = pvparen (p>(maxPrec-1)) $
+        sep (pvPrint d (maxPrec-1) e : map (nest 2 . ppApArg) ts)
+        where ppApArg ty = text "\183" <> pvPrint d maxPrec ty
+    pvPrint d p (CSelectT ti i) = text "." <> pvpId d i
     pvPrint d p (CStructT ty ies) = pvPrint d p (CStruct (Just True) tyc ies)
         where tyc = fromJustOrErr "pvPrint CStructT" (leftCon ty)
-    pvPrint d p (CSelectT _ i) = text "." <> pvpId d i
-    pvPrint d p (CLitT _ l) = pvPrint d p l
+    pvPrint d p (CCon1 ti i e) = pvPrint d p (CCon i [e])
+    pvPrint d p (CConT t i es) = pvparen (p>(maxPrec-1)) $ sep (pvpId d i : map (pvPrint d maxPrec) es)
+        where ppApArg ty = text "\183" <> pvPrint d maxPrec ty
+    pvPrint d p (CLitT t l) = pvPrint d p l
     pvPrint d p (CAnyT pos uk t) = text "?"
-    pvPrint d p (CmoduleVerilogT _ m ui c r ses fs sch ps) =
+    pvPrint d p (CmoduleVerilogT t m ui c r ses fs sch ps) =
         pvPrint d p (CmoduleVerilog m ui c r ses fs sch ps)
     pvPrint d p (CForeignFuncCT i prim_ty) =
-        t"(unexpected) ForeignFuncC" <+> pp d i
-    pvPrint d p (CTApply e ts) = pparen (p>(maxPrec-1)) $
-        sep (pvPrint d (maxPrec-1) e : map (nest 2 . ppApArg) ts)
-        where ppApArg ty = t"\183" <> pvPrint d maxPrec ty
+        text "(unexpected) ForeignFuncC" <+> pvpId d i
     pvPrint d p (Cattributes pps) =
-        text "Attributes" <> pparen True (pvPrint d 0 (map snd pps))
---    pvPrint d p x = internalError ("pvPrint CExpr bad: " ++ show x)
+        text "Attributes" <> pvparen True (pvPrint d 0 (map snd pps))
 
 instance PVPrint CLiteral where
     pvPrint d p (CLiteral _ l) = pvPrint d p l
@@ -1107,9 +1039,9 @@ ppCP d p =
      xs  -> t"{"<>(catList(map (pp d) xs) (t","))<>t"}"
 
 instance PVPrint CQual where
-        pvPrint d p (CQGen _ pattern expr) =
-            pp d expr <+> t "matches" <+> pp d expr
-        pvPrint d p (CQFilter e) = pp d e
+    pvPrint d p (CQGen t pat expr) =
+        pvPrint d 0 expr <+> text "matches" <+> pvPrint d 0 pat
+    pvPrint d p (CQFilter e) = pvPrint d 0 e
 
 
 instance PVPrint CPat where

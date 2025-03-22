@@ -5,7 +5,7 @@
 -- @@ and returns a list of possible parsings of this string.  A parsing
 -- @@ consists of a b value, and a list of remaining as.
 
-module Parse(Parser, (+.+), (..+), (+..), (|||), (>>-), (>>>), (||!), (|!!), (.>),
+module Libs.Parse(Parser, (+.+), (..+), (+..), (|||), (>>-), (>>>), (||!), (|!!), (.>),
              into, lit, litp, many, many1, succeed, failure, sepBy, count, sepBy1, testp, token, recover,
              ParseResult, parse, sParse, simpleParse) where
 

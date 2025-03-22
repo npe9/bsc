@@ -44,6 +44,7 @@ BUILDDIR=$(TOP)/build/comp
 
 # Parsec
 PARSEC_HS = ../Parsec
+PARSEC_PKGS = parsec
 
 # STP
 STP_HS = ../vendor/stp/include_hs
@@ -122,25 +123,23 @@ endif
 
 GHCPROFAUTO = -fprof-auto
 
-PACKAGES = \
-	-package base \
-	-package containers \
-	-package array \
-	-package mtl \
-	-package unix \
-	-package regex-compat \
-	-package bytestring \
-	-package directory \
-	-package process \
-	-package filepath \
-	-package time \
-	-package old-time \
-	-package old-locale \
-	-package split \
-	-package syb \
-	-package integer-gmp \
-	-package text \
-	$(GHCEXTRAPKGS)
+# determine the packages we need to link against
+# (both the compiler and the simulator)
+PKGS = base \
+	array directory mtl \
+	containers old-time process random syb unix filepath \
+	pretty bytestring text utf8-string \
+	stm parallel haskeline terminfo xhtml time regex-compat \
+	$(PARSEC_PKGS) \
+	$(EXTRA_PKGS)
+
+# determine the include paths, for the compiler and for the simulator
+INCLUDES = \
+-i. \
+-i$(HTCL_HS) \
+$(if $(STP_USE_YICES),-i$(YICES_HS)) \
+-i$(STP_HS) \
+$(EXTRA_PATHS) \
 
 # GHC can compile either a single file (use GHCCOMPILEFLAGS) or
 # in make mode where it follows dependencies (use GHCMAKEFLAGS).
@@ -180,7 +179,7 @@ GHCFLAGS = \
 	-fno-warn-orphans \
 	-fno-warn-name-shadowing \
 	-fno-warn-unused-matches \
-	$(PACKAGES) \
+	$(PKGS) \
 	$(GHCINCLUDES) \
 	$(GHCTMP) \
 
@@ -407,3 +406,6 @@ full_clean: clean
 	$(RM) tags TAGS
 
 # -----
+
+GHCNORTSPKG = 
+GHCEXTRAPKGS = $(if $(filter-out undefined, $(origin GHC_EXTRALIBS)), $(GHC_EXTRALIBS), "") -package parsec
