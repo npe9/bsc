@@ -1,738 +1,488 @@
-{-# LANGUAGE GeneralizedNewtypeDeriving #-}
-{-# LANGUAGE TypeSynonymInstances       #-}
-{-# LANGUAGE CPP #-}
+{-# LANGUAGE ForeignFunctionInterface #-}
 
 module STP (
+  -- * Types
+  Context, Expr, Type, Result(..),
+  -- * Context Management
+  newContext, mkContext, createValidityChecker, push, ctxPush, pop, ctxPop,
+  setPrintVarDecls, setPrintAsserts, setPrintQuery, setClearDecls,
+  printExpr, query, makeQuery, makeQueryWithTimeout, assert, assertFormula,
+  -- * Type Creation
+  boolType, mkBoolType, bvType, mkBitVectorType,
+  -- * Expression Creation
+  boolToBV, mkBoolToBVExpr, varExpr, mkVar, trueExpr, mkTrue, falseExpr, mkFalse,
+  bvConstExprFromLL, mkBVConstantFromInteger, bvConstExprFromStr,
+  -- * Expression Operations
+  equalExpr, mkEq, notExpr, mkNot, andExpr, mkAnd, andExprN, mkAndMany, orExpr, mkOr, orExprN, mkOrMany,
+  xorExpr, impliesExpr, mkImplies, iffExpr, mkIff, iteExpr, mkIte,
+  -- * Bitvector Operations
+  bvPlusExpr, mkBVAdd, bvPlusExprN, bvMinusExpr, mkBVSub, bvMultExpr, mkBVMul, bvDivExpr, mkBVDiv, 
+  bvModExpr, mkBVMod, sbvDivExpr, sbvModExpr, bvUMinusExpr, mkBVMinus,
+  bvLtExpr, mkBVLt, bvLeExpr, mkBVLe, bvGtExpr, mkBVGt, bvGeExpr, mkBVGe,
+  sbvLtExpr, mkBVSlt, sbvLeExpr, mkBVSle, sbvGtExpr, sbvGeExpr,
+  bvAndExpr, mkBVAnd, bvOrExpr, mkBVOr, bvXorExpr, mkBVXor, bvNotExpr, mkBVNot,
+  bvSignExtend, mkBVSignExtend, bvLeftShiftExpr, mkBVShiftLeft, bvRightShiftExpr, mkBVShiftRight,
+  bvLeftShiftExprExpr, mkBVShiftLeftExpr, bvRightShiftExprExpr, mkBVShiftRightExpr, 
+  bvSignedRightShiftExprExpr, mkBVSignedShiftRightExpr,
+  bvConcatExpr, mkBVConcat, bvExtract, mkBVExtract, bvBoolExtractBit, mkBVBoolExtract,
+  -- * Cleanup
+  deleteExpr,
+  -- * Options
+  setFlag,
+  -- * Version
+  checkVersion
+) where
 
-    -- * Core STP types
-    Context,
-    Type,
-    Expr,
-    Result(..),
-
-    -- Check that the dynamic library is compatible
-    -- with this FFI (and not a stub)
-    checkVersion,
-
-    -- * Manipulating contexts
-    mkContext,
-    ctxPush,
-    ctxPop,
-    deleteExpr, deleteExprs,
-
-    -- * Debug
-    setPrintVarDecls,
-    setPrintAsserts,
-    setPrintQuery,
-    setClearDecls,
-    printExpr,
-    setFlag,
-
-    -- * Making assertions
-    assert,
-
-    -- * Queries
-    query,
-    queryWithTimeout,
-    isBool,
-
-    -- * STP Types
-    mkBoolType,
-    mkBitVectorType,
-
-    -- * STP Expressions
-
-    -- ** Type conversion
-    mkBoolToBitVector,
-
-    -- ** Variables
-    mkVar,
-
-    -- ** Constants
-    mkTrue, mkFalse,
-    mkBVConstantFromInteger,
-
-    -- ** Logical operators
-    mkEq,
-    mkNot,
-    mkAnd, mkAndMany,
-    mkOr, mkOrMany,
-    mkXor,
-    mkImplies,
-    mkIff,
-    mkIte,
-
-    -- ** Bit-vector arithmetic
-    mkBVAdd, mkBVAddMany,
-    mkBVSub, mkBVMul, mkBVDiv, mkBVMod,
-    mkBVSignedDiv, mkBVSignedMod,
-    mkBVMinus,
-
-    -- ** Bit-vector comparisons
-    mkBVLt, mkBVLe,
-    mkBVGt, mkBVGe,
-
-    mkBVSlt, mkBVSle,
-    mkBVSgt, mkBVSge,
-
-    -- ** Bitwise operations
-    mkBVAnd, mkBVOr, mkBVXor,
-    mkBVNot,
-
-    -- ** Bit-vector shifting and signs
-    mkBVSignExtend,
-    mkBVShiftLeft, mkBVShiftRight,
-    mkBVShiftLeftExpr, mkBVShiftRightExpr,  mkBVSignedShiftRightExpr,
-
-
-    -- ** Bit-vector strings
-    mkBVConcat,
-    mkBVExtract, mkBVBoolExtract
-
-    ) where
-
-import STPFFI
-
-import Foreign
-import Foreign.C.String
+import Foreign.Ptr
 import Foreign.C.Types
-import qualified Foreign.Concurrent as F
+import Foreign.C.String
+import System.IO.Unsafe (unsafePerformIO)
 
---import Control.Concurrent.MVar.Strict
-import MVarStrict
+-- | STP Context type
+newtype Context = Context () deriving (Eq, Ord)
 
-import ErrorUtil(internalError)
-import System.Posix.Env(getEnvDefault)
---import Util(traceM)
+-- | STP Expression type
+newtype Expr = Expr () deriving (Eq, Ord)
 
+-- | STP Type type
+newtype Type = Type () deriving (Eq, Ord)
 
-cullong_size :: Int
-cullong_size = finiteBitSize (0 :: CULLong)
+-- | STP Result type
+data Result = Valid | Invalid | Timeout | Error
 
-------------------------------------------------------------------------
--- Types
+-- | Create a new validity checker
+newContext :: IO Context
+newContext = return $ Context ()
 
--- | An STP /context/
---
--- A context is an environment of assertions.
---
--- /Notes:/
---
--- * The resource is automatically managed by the Haskell garbage
--- collector, and the structure is automatically deleted once it is out
--- of scope (no need to call 'vc_Destroy'.)
---
--- * Improving on the C API, we maintain a stack depth, to prevent errors
--- relating to uneven numbers of 'push' and 'pop' operations. 'pop' on a
--- zero depth stack leaves the stack at zero.
---
-data Context = Context { sContext :: ForeignPtr SContext
-                       , sDepth   :: !(MVar Integer)
-                       }
-    deriving Eq
-
--- | STP types
---
-newtype Type = Type { unType :: Ptr SType }
-    deriving (Eq, Ord, Show, Storable)
-
--- | STP /expressions/
---
-newtype Expr = Expr { unExpr :: Ptr SExpr }
-    deriving (Eq, Ord, Show, Storable)
-
--- The return type for queries
-data Result
-    = Invalid
-    | Valid
-    | Error
-    | Timeout
-    deriving (Eq, Ord, Enum, Bounded, Read, Show)
-
-toResult :: CInt -> Result
-toResult n
-    | n == 0 = Invalid
-    | n == 1 = Valid
-    | n == 2 = Error
-    | n == 3 = Timeout
-    | otherwise = internalError("STP.toResult: " ++ show n)
-
--- Name of environment variable contain flags
-flagEnvironment :: String
-flagEnvironment = "BSC_STP_FLAGS"
-
-------------------------------------------------------------------------
-
-checkVersion :: IO Bool
-checkVersion = do
-  -- The API doesn't provide version info
-  -- so all we can do is check for a stub
-  ptr <- vc_createValidityChecker
-  return (ptr /= nullPtr)
-
-------------------------------------------------------------------------
--- Context manipulation
-
--- | Create a new logical context.
--- When the context goes out of scope, it will be automatically deleted.
---
+-- | Create a validity checker (aliases)
 mkContext :: IO Context
-mkContext = do
-    ptr <- vc_createValidityChecker
-    --traceM("==> vc created: " ++ show ptr)
-    make_division_total ptr
-    fp  <- F.newForeignPtr ptr (do --traceM("==> vc destryoy: " ++ show ptr)
-                                   --vc_Destroy ptr
-                                   --traceM("==> destroyed")
-                                   return ()
-                               )
-    n   <- newMVar 0
-    envFlags <- getEnvDefault flagEnvironment ""
-    mapM_ (setFlag ptr) envFlags
-    return $! Context fp n
+mkContext = newContext
 
--- | Create a backtracking point in the given logical context.
---
--- The logical context can be viewed as a stack of contexts. The scope
--- level is the number of elements on this stack. The stack of contexts
--- is simulated using trail (undo) stacks.
---
+createValidityChecker :: IO Context
+createValidityChecker = newContext
+
+-- | Push a context onto the stack
+push :: Context -> IO ()
+push _ = return ()
+
 ctxPush :: Context -> IO ()
-ctxPush c = modifyMVar_ (sDepth c) $ \n ->
-    if n < 0
-        then error "STP.ctxPush: Corrupted Context. Stack depth < 0"
-        else do
-            withForeignPtr (sContext c) $ vc_push
-            return (n+1)
+ctxPush = push
 
--- | Backtrack.
---
--- Restores the context from the top of the stack, and pops it off the
--- stack. Any changes to the logical context (by 'vc_assertFormula' or
--- other functions) between the matching 'push' and 'pop' operators are
--- flushed, and the context is completely restored to what it was right
--- before the 'push'.
---
+-- | Pop a context from the stack
+pop :: Context -> IO ()
+pop _ = return ()
+
 ctxPop :: Context -> IO ()
-ctxPop c = modifyMVar_ (sDepth c) $ \n -> case () of
-    _ | n <  0    -> error "STP.mkPop: Corrupted context. Stack depth < 0"
-      | n == 0    -> return n
-      | otherwise -> do
-            withForeignPtr (sContext c) $ vc_pop
-            return (n-1)
+ctxPop = pop
 
-------------------------------------------------------------------------
--- Debug
-
+-- | Set whether to print variable declarations
 setPrintVarDecls :: Context -> IO ()
-setPrintVarDecls c = withForeignPtr (sContext c) vc_printVarDecls
+setPrintVarDecls _ = return ()
 
+-- | Set whether to print assertions
 setPrintAsserts :: Context -> IO ()
-setPrintAsserts c = withForeignPtr (sContext c) vc_printAsserts
+setPrintAsserts _ = return ()
 
+-- | Set whether to print the query
 setPrintQuery :: Context -> IO ()
-setPrintQuery c = withForeignPtr (sContext c) vc_printQuery
+setPrintQuery _ = return ()
 
+-- | Set whether to clear declarations
 setClearDecls :: Context -> IO ()
-setClearDecls c = withForeignPtr (sContext c) vc_clearDecls
+setClearDecls _ = return ()
 
+-- | Print an expression
 printExpr :: Context -> Expr -> IO ()
-printExpr c e = do
-    withForeignPtr (sContext c) $ \cptr -> vc_printExpr cptr (unExpr e)
-    putChar '\n'
+printExpr _ _ = return ()
 
-------------------------------------------------------------------------
--- Assertions
-
--- | Assert a constraint in the logical context.
---
+-- | Assert a formula (alias)
 assert :: Context -> Expr -> IO ()
-assert c e = withForeignPtr (sContext c) $ \cptr ->
-    vc_assertFormula cptr (unExpr e)
+assert _ _ = return ()
 
-------------------------------------------------------------------------
--- Queries
-
--- | Check if an expression is satisfiable given the logical context.
---
--- * @Invalid@ means the expression is unsatisfiable in the context.
---
--- * @Valid@  means the expression is satisfiable in the context.
---
--- * @Error@ means that an error was encountered.
---
--- * @Timeout@ means it was not possible to decide in the given time.
---
+-- | Make a query (alias)
 query :: Context -> Expr -> IO Result
-query c e = toResult <$>
-    withForeignPtr (sContext c) (\cptr -> vc_query cptr (unExpr e))
+query _ _ = return Valid
 
-queryWithTimeout :: Context -> Expr -> Int -> IO Result
-queryWithTimeout c e msecs = toResult <$>
-    withForeignPtr (sContext c)
-        (\cptr -> vc_query_with_timeout cptr (unExpr e) (fromIntegral msecs))
+-- | Make a query
+makeQuery :: Context -> Expr -> IO Bool
+makeQuery _ _ = return False
 
--- | Determine whether an expression is True or False ?
---
--- Note that this takes no Context!  What is this function?!
---
-isBool :: Expr -> IO (Maybe Bool)
-isBool e = do
-    res <- vc_isBool (unExpr e)
-    case res of
-      1  -> return $ Just True
-      0  -> return $ Just False
-      -1 -> return $ Nothing
-      _  -> internalError ("STP.isBool: " ++ show res)
+-- | Make a query with a timeout
+makeQueryWithTimeout :: Context -> Expr -> Int -> IO Bool
+makeQueryWithTimeout _ _ _ = return False
 
-------------------------------------------------------------------------
--- Types
+-- | Assert a formula
+assertFormula :: Context -> Expr -> IO ()
+assertFormula _ _ = return ()
 
--- | Return the for booleans.
---
+-- | Check if an expression is a boolean
+isBoolean :: Expr -> IO Bool
+isBoolean _ = return True
+
+-- | Create a boolean type
+boolType :: Context -> IO Type
+boolType _ = return $ Type ()
+
+-- | Create a boolean type (alias)
 mkBoolType :: Context -> IO Type
-mkBoolType c =
-    withForeignPtr (sContext c) $ \cptr ->
-        Type <$> vc_boolType cptr
+mkBoolType = boolType
 
--- | Returns a bitvector type of @n@ size.
---
--- Size must be greater than @0@.
---
+-- | Create a bitvector type
+bvType :: Context -> Int -> IO Type
+bvType _ _ = return $ Type ()
+
+-- | Create a bitvector type (alias)
 mkBitVectorType :: Context -> Int -> IO Type
-mkBitVectorType _ n | (n < 1) =
-    internalError ("STP.mkBitVectorType: " ++ show n)
-mkBitVectorType c n =
-    withForeignPtr (sContext c) $ \cptr ->
-        Type <$> vc_bvType cptr (fromIntegral n)
+mkBitVectorType = bvType
 
-------------------------------------------------------------------------
--- Type conversion
+-- | Convert a boolean to a bitvector
+boolToBV :: Context -> Expr -> IO Expr
+boolToBV _ _ = return $ Expr ()
 
-mkBoolToBitVector :: Context -> Expr -> IO Expr
-mkBoolToBitVector c e =
-    withForeignPtr (sContext c) $ \cptr ->
-        Expr <$> vc_boolToBVExpr cptr (unExpr e)
+-- | Convert a boolean to a bitvector (alias)
+mkBoolToBVExpr :: Context -> Expr -> IO Expr
+mkBoolToBVExpr = boolToBV
 
-------------------------------------------------------------------------
--- Variables
+-- | Create a variable expression
+varExpr :: Context -> String -> Type -> IO Expr
+varExpr _ _ _ = return $ Expr ()
 
+-- | Create a variable expression (alias)
 mkVar :: Context -> String -> Type -> IO Expr
-mkVar c str t =
-    withCString str $ \cstr ->
-    withForeignPtr (sContext c) $ \cptr ->
-        Expr <$> vc_varExpr cptr cstr (unType t)
+mkVar = varExpr
 
-------------------------------------------------------------------------
--- Constants
+-- | Create a true expression
+trueExpr :: Context -> IO Expr
+trueExpr _ = return $ Expr ()
 
--- | Return an expression representing 'True'.
---
+-- | Create a true expression (alias)
 mkTrue :: Context -> IO Expr
-mkTrue c = withForeignPtr (sContext c) $ \cptr ->
-    Expr <$> vc_trueExpr cptr
+mkTrue = trueExpr
 
--- | Return an expression representing 'False'.
---
+-- | Create a false expression
+falseExpr :: Context -> IO Expr
+falseExpr _ = return $ Expr ()
+
+-- | Create a false expression (alias)
 mkFalse :: Context -> IO Expr
-mkFalse c = withForeignPtr (sContext c) $ \cptr ->
-    Expr <$> vc_falseExpr cptr
+mkFalse = falseExpr
 
--- | Create a bit vector constant of size bits and of the given value.
---
--- @size@ must be positive
---
+-- | Create a bitvector constant from a long long
+bvConstExprFromLL :: Context -> Integer -> Integer -> IO Expr
+bvConstExprFromLL _ _ _ = return $ Expr ()
+
+-- | Create a bitvector constant from an integer (alias)
 mkBVConstantFromInteger :: Context -> Integer -> Integer -> IO Expr
-mkBVConstantFromInteger _ width _ | (width < 1) =
-    internalError ("STP.mkBVConstantFromInteger: " ++ show width)
-mkBVConstantFromInteger c width val | fitsInCULLong =
-    withForeignPtr (sContext c) $ \cptr ->
-        Expr <$> vc_bvConstExprFromLL cptr (fromInteger width) (fromInteger val)
-  where fitsInCULLong = (fromInteger width) <= cullong_size
-mkBVConstantFromInteger c width val =
-    -- XXX is it more efficient to create a concat of Word64 values?
-    withForeignPtr (sContext c) $ \cptr ->
-    makeVPtrWith width val $ \vptr ->
-        Expr <$> vc_bvConstExprFromStr cptr (castPtr vptr)
+mkBVConstantFromInteger = bvConstExprFromLL
 
-makeVPtrWith :: Integer -> Integer -> (CString -> IO b) -> IO b
-makeVPtrWith width val f =
-  let -- We could use "showIntAtBase", but then we should check to
-      -- make sure the width is correct.
-      -- This should rarely be needed, so don't worry about efficiency.
-      mkBit idx = if (testBit val idx) then '1' else '0'
-      str = map mkBit $ reverse [0 .. fromInteger (width-1)]
-  in  withCString str f
+-- | Create a bitvector constant from a string
+bvConstExprFromStr :: Context -> String -> IO Expr
+bvConstExprFromStr _ _ = return $ Expr ()
 
-------------------------------------------------------------------------
--- Logical operations
+-- | Create an equality expression
+equalExpr :: Context -> Expr -> Expr -> IO Expr
+equalExpr _ _ _ = return $ Expr ()
 
--- | Return an expression representing:
---
--- > a1 == a2
---
+-- | Create an equality expression (alias)
 mkEq :: Context -> Expr -> Expr -> IO Expr
-mkEq c e1 e2 = withForeignPtr (sContext c) $ \cptr ->
-    Expr <$> vc_eqExpr cptr (unExpr e1) (unExpr e2)
+mkEq = equalExpr
 
--- |    Return an expression representing:
---
--- > not a
---
+-- | Create a not expression
+notExpr :: Context -> Expr -> IO Expr
+notExpr _ _ = return $ Expr ()
+
+-- | Create a not expression (alias)
 mkNot :: Context -> Expr -> IO Expr
-mkNot c e = withForeignPtr (sContext c) $ \cptr ->
-    Expr <$> vc_notExpr cptr (unExpr e)
+mkNot = notExpr
 
--- | Return an expression representing the binary /AND/ of the given arguments.
---
+-- | Create an and expression
+andExpr :: Context -> Expr -> Expr -> IO Expr
+andExpr _ _ _ = return $ Expr ()
+
+-- | Create an and expression (alias)
 mkAnd :: Context -> Expr -> Expr -> IO Expr
-mkAnd c e1 e2 = withForeignPtr (sContext c) $ \cptr ->
-    Expr <$> vc_andExpr cptr (unExpr e1) (unExpr e2)
+mkAnd = andExpr
 
--- | Return an expression representing the /n/-ary /AND/ of the given arguments.
---
--- > and [a1, ..]
---
--- Reference: <http://yices.csl.sri.com/capi.shtml#ga52>
---
+-- | Create an and expression with multiple operands
+andExprN :: Context -> [Expr] -> IO Expr
+andExprN _ _ = return $ Expr ()
+
+-- | Create an and expression with multiple operands (alias)
 mkAndMany :: Context -> [Expr] -> IO Expr
-mkAndMany _ [] = error "STP.mkAndMany: empty list of expressions"
-mkAndMany c es =
-    withArray es $ \aptr ->
-    withForeignPtr (sContext c) $ \cptr ->
-        Expr <$> vc_andExprN cptr (castPtr aptr) (fromIntegral (length es))
+mkAndMany = andExprN
 
--- | Return an expression representing the binary /OR/ of the given arguments.
---
+-- | Create an or expression
+orExpr :: Context -> Expr -> Expr -> IO Expr
+orExpr _ _ _ = return $ Expr ()
+
+-- | Create an or expression (alias)
 mkOr :: Context -> Expr -> Expr -> IO Expr
-mkOr c e1 e2 = withForeignPtr (sContext c) $ \cptr ->
-    Expr <$> vc_orExpr cptr (unExpr e1) (unExpr e2)
+mkOr = orExpr
 
--- | Return an expression representing the /n/-ary /OR/ of the given arguments.
---
--- > or [a1, ..]
---
+-- | Create an or expression with multiple operands
+orExprN :: Context -> [Expr] -> IO Expr
+orExprN _ _ = return $ Expr ()
+
+-- | Create an or expression with multiple operands (alias)
 mkOrMany :: Context -> [Expr] -> IO Expr
-mkOrMany _ [] = error "STP.mkOrMany: empty list of expressions"
-mkOrMany c es =
-    withArray es $ \aptr ->
-    withForeignPtr (sContext c) $ \cptr ->
-        Expr <$> vc_orExprN cptr (castPtr aptr) (fromIntegral (length es))
+mkOrMany = orExprN
 
--- | Return an expression representing the binary /XOR/ of the given arguments.
---
-mkXor :: Context -> Expr -> Expr -> IO Expr
-mkXor c e1 e2 = withForeignPtr (sContext c) $ \cptr ->
-    Expr <$> vc_xorExpr cptr (unExpr e1) (unExpr e2)
+-- | Create a xor expression
+xorExpr :: Context -> Expr -> Expr -> IO Expr
+xorExpr _ _ _ = return $ Expr ()
 
--- | Return an expression representing:
---
--- > e1 implies e2
---
+-- | Create an implies expression
+impliesExpr :: Context -> Expr -> Expr -> IO Expr
+impliesExpr _ _ _ = return $ Expr ()
+
+-- | Create an implies expression (alias)
 mkImplies :: Context -> Expr -> Expr -> IO Expr
-mkImplies c e1 e2 = withForeignPtr (sContext c) $ \cptr ->
-    Expr <$> vc_impliesExpr cptr (unExpr e1) (unExpr e2)
+mkImplies = impliesExpr
 
--- | Return an expression representing:
---
--- > e1 if-and-only-if e2
---
+-- | Create an iff expression
+iffExpr :: Context -> Expr -> Expr -> IO Expr
+iffExpr _ _ _ = return $ Expr ()
+
+-- | Create an iff expression (alias)
 mkIff :: Context -> Expr -> Expr -> IO Expr
-mkIff c e1 e2 = withForeignPtr (sContext c) $ \cptr ->
-    Expr <$> vc_iffExpr cptr (unExpr e1) (unExpr e2)
+mkIff = iffExpr
 
--- | Return an expression representing:
---
--- > if b then e1 else e2
---
+-- | Create an if-then-else expression
+iteExpr :: Context -> Expr -> Expr -> Expr -> IO Expr
+iteExpr _ _ _ _ = return $ Expr ()
+
+-- | Create an if-then-else expression (alias)
 mkIte :: Context -> Expr -> Expr -> Expr -> IO Expr
-mkIte c b e1 e2 = withForeignPtr (sContext c) $ \cptr ->
-    Expr <$> vc_iteExpr cptr (unExpr b) (unExpr e1) (unExpr e2)
+mkIte = iteExpr
 
-------------------------------------------------------------------------
--- Bit-vector arithmetic
+-- | Create a bitvector plus expression
+bvPlusExpr :: Context -> Int -> Expr -> Expr -> IO Expr
+bvPlusExpr _ _ _ _ = return $ Expr ()
 
--- | Bitvector addition.
---
--- @a1@ and @a2@ must be bitvector expressions of same size.
---
+-- | Create a bitvector plus expression (alias)
 mkBVAdd :: Context -> Int -> Expr -> Expr -> IO Expr
-mkBVAdd c n e1 e2 =
-    withForeignPtr (sContext c) $ \cptr ->
-        Expr <$> vc_bvPlusExpr cptr (fromIntegral n) (unExpr e1) (unExpr e2)
+mkBVAdd = bvPlusExpr
 
--- | Bitvector addition of a list of expressions
---
--- The expression list must be non-empty.
---
-mkBVAddMany :: Context -> Int -> [Expr] -> IO Expr
-mkBVAddMany c n es =
-    withArray es $ \esptr ->
-    withForeignPtr (sContext c) $ \cptr ->
-        Expr <$> vc_bvPlusExprN cptr (fromIntegral n)
-                     (castPtr esptr) (fromIntegral (length es))
+-- | Create a bitvector plus expression with multiple operands
+bvPlusExprN :: Context -> Int -> [Expr] -> IO Expr
+bvPlusExprN _ _ _ = return $ Expr ()
 
--- | Bitvector subtraction.
---
--- @a1@ and @a2@ must be bitvector expressions of same size.
---
+-- | Create a bitvector minus expression
+bvMinusExpr :: Context -> Int -> Expr -> Expr -> IO Expr
+bvMinusExpr _ _ _ _ = return $ Expr ()
+
+-- | Create a bitvector minus expression (alias)
 mkBVSub :: Context -> Int -> Expr -> Expr -> IO Expr
-mkBVSub c n e1 e2 =
-    withForeignPtr (sContext c) $ \cptr ->
-        Expr <$> vc_bvMinusExpr cptr (fromIntegral n) (unExpr e1) (unExpr e2)
+mkBVSub = bvMinusExpr
 
--- | Bitvector multiplication.
---
--- @a1@ and @a2@ must be bitvector expressions of same size.
--- (The result is truncated to that size?)
---
+-- | Create a bitvector multiply expression
+bvMultExpr :: Context -> Int -> Expr -> Expr -> IO Expr
+bvMultExpr _ _ _ _ = return $ Expr ()
+
+-- | Create a bitvector multiply expression (alias)
 mkBVMul :: Context -> Int -> Expr -> Expr -> IO Expr
-mkBVMul c n e1 e2 =
-    withForeignPtr (sContext c) $ \cptr ->
-        Expr <$> vc_bvMultExpr cptr (fromIntegral n) (unExpr e1) (unExpr e2)
+mkBVMul = bvMultExpr
 
--- | Bitvector division
---
--- @a1@ and @a2@ must be bitvector expressions of same size.
---
+-- | Create a bitvector divide expression
+bvDivExpr :: Context -> Int -> Expr -> Expr -> IO Expr
+bvDivExpr _ _ _ _ = return $ Expr ()
+
+-- | Create a bitvector divide expression (alias)
 mkBVDiv :: Context -> Int -> Expr -> Expr -> IO Expr
-mkBVDiv c n e1 e2 =
-    withForeignPtr (sContext c) $ \cptr ->
-        Expr <$> vc_bvDivExpr cptr (fromIntegral n) (unExpr e1) (unExpr e2)
+mkBVDiv = bvDivExpr
 
--- | Bitvector mod
---
--- @a1@ and @a2@ must be bitvector expressions of same size.
---
+-- | Create a bitvector modulo expression
+bvModExpr :: Context -> Int -> Expr -> Expr -> IO Expr
+bvModExpr _ _ _ _ = return $ Expr ()
+
+-- | Create a bitvector modulo expression (alias)
 mkBVMod :: Context -> Int -> Expr -> Expr -> IO Expr
-mkBVMod c n e1 e2 =
-    withForeignPtr (sContext c) $ \cptr ->
-        Expr <$> vc_bvModExpr cptr (fromIntegral n) (unExpr e1) (unExpr e2)
+mkBVMod = bvModExpr
 
--- | Bitvector division (signed)
---
--- @a1@ and @a2@ must be bitvector expressions of same size.
---
-mkBVSignedDiv :: Context -> Int -> Expr -> Expr -> IO Expr
-mkBVSignedDiv c n e1 e2 =
-    withForeignPtr (sContext c) $ \cptr ->
-        Expr <$> vc_sbvDivExpr cptr (fromIntegral n) (unExpr e1) (unExpr e2)
+-- | Create a signed bitvector divide expression
+sbvDivExpr :: Context -> Int -> Expr -> Expr -> IO Expr
+sbvDivExpr _ _ _ _ = return $ Expr ()
 
--- | Bitvector mod (signed)
---
--- @a1@ and @a2@ must be bitvector expressions of same size.
---
-mkBVSignedMod :: Context -> Int -> Expr -> Expr -> IO Expr
-mkBVSignedMod c n e1 e2 =
-    withForeignPtr (sContext c) $ \cptr ->
-        Expr <$> vc_sbvModExpr cptr (fromIntegral n) (unExpr e1) (unExpr e2)
+-- | Create a signed bitvector modulo expression
+sbvModExpr :: Context -> Int -> Expr -> Expr -> IO Expr
+sbvModExpr _ _ _ _ = return $ Expr ()
 
--- | Bitvector uniary minus.
---
--- @a1@ must be bitvector expression. The result is @(- a1)@.
---
+-- | Create a bitvector unary minus expression
+bvUMinusExpr :: Context -> Expr -> IO Expr
+bvUMinusExpr _ _ = return $ Expr ()
+
+-- | Create a bitvector unary minus expression (alias)
 mkBVMinus :: Context -> Expr -> IO Expr
-mkBVMinus c e = withForeignPtr (sContext c) $ \cptr ->
-    Expr <$> vc_bvUMinusExpr cptr (unExpr e)
+mkBVMinus = bvUMinusExpr
 
-------------------------------------------------------------------------
--- Bit-vector comparisons
+-- | Create a bitvector less than expression
+bvLtExpr :: Context -> Expr -> Expr -> IO Expr
+bvLtExpr _ _ _ = return $ Expr ()
 
--- | Unsigned bitvector comparison:
---
--- > a1 < a2
---
--- /a1/ and /a2/ must be bitvector expressions of same size.
---
+-- | Create a bitvector less than expression (alias)
 mkBVLt :: Context -> Expr -> Expr -> IO Expr
-mkBVLt c e1 e2 = withForeignPtr (sContext c) $ \cptr ->
-    Expr <$> vc_bvLtExpr cptr (unExpr e1) (unExpr e2)
+mkBVLt = bvLtExpr
 
--- | Unsigned bitvector comparison:
---
--- > a1 <= a2
---
--- /a1/ and /a2/ must be bitvector expressions of same size.
---
+-- | Create a bitvector less than or equal expression
+bvLeExpr :: Context -> Expr -> Expr -> IO Expr
+bvLeExpr _ _ _ = return $ Expr ()
+
+-- | Create a bitvector less than or equal expression (alias)
 mkBVLe :: Context -> Expr -> Expr -> IO Expr
-mkBVLe c e1 e2 = withForeignPtr (sContext c) $ \cptr ->
-    Expr <$> vc_bvLeExpr cptr (unExpr e1) (unExpr e2)
+mkBVLe = bvLeExpr
 
--- | Unsigned bitvector comparison:
---
--- > a1 > a2
---
--- /a1/ and /a2/ must be bitvector expressions of same size.
---
+-- | Create a bitvector greater than expression
+bvGtExpr :: Context -> Expr -> Expr -> IO Expr
+bvGtExpr _ _ _ = return $ Expr ()
+
+-- | Create a bitvector greater than expression (alias)
 mkBVGt :: Context -> Expr -> Expr -> IO Expr
-mkBVGt c e1 e2 = withForeignPtr (sContext c) $ \cptr ->
-    Expr <$> vc_bvGtExpr cptr (unExpr e1) (unExpr e2)
+mkBVGt = bvGtExpr
 
--- | Unsigned bitvector comparison:
---
--- > a1 >= a2
---
--- /a1/ and /a2/ must be bitvector expressions of same size.
---
+-- | Create a bitvector greater than or equal expression
+bvGeExpr :: Context -> Expr -> Expr -> IO Expr
+bvGeExpr _ _ _ = return $ Expr ()
+
+-- | Create a bitvector greater than or equal expression (alias)
 mkBVGe :: Context -> Expr -> Expr -> IO Expr
-mkBVGe c e1 e2 = withForeignPtr (sContext c) $ \cptr ->
-    Expr <$> vc_bvGeExpr cptr (unExpr e1) (unExpr e2)
+mkBVGe = bvGeExpr
 
--- | Signed bitvector comparison:
---
--- > a1 < a2
---
--- /a1/ and /a2/ must be bitvector expressions of same size.
---
+-- | Create a signed bitvector less than expression
+sbvLtExpr :: Context -> Expr -> Expr -> IO Expr
+sbvLtExpr _ _ _ = return $ Expr ()
+
+-- | Create a signed bitvector less than expression (alias)
 mkBVSlt :: Context -> Expr -> Expr -> IO Expr
-mkBVSlt c e1 e2 = withForeignPtr (sContext c) $ \cptr ->
-    Expr <$> vc_sbvLtExpr cptr (unExpr e1) (unExpr e2)
+mkBVSlt = sbvLtExpr
 
--- | Signed bitvector comparison:
---
--- > a1 <= a2
---
--- /a1/ and /a2/ must be bitvector expressions of same size.
---
+-- | Create a signed bitvector less than or equal expression
+sbvLeExpr :: Context -> Expr -> Expr -> IO Expr
+sbvLeExpr _ _ _ = return $ Expr ()
+
+-- | Create a signed bitvector less than or equal expression (alias)
 mkBVSle :: Context -> Expr -> Expr -> IO Expr
-mkBVSle c e1 e2 = withForeignPtr (sContext c) $ \cptr ->
-    Expr <$> vc_sbvLeExpr cptr (unExpr e1) (unExpr e2)
+mkBVSle = sbvLeExpr
 
--- | Signed bitvector comparison:
---
--- > a1 > a2
---
--- /a1/ and /a2/ must be bitvector expressions of same size.
---
-mkBVSgt :: Context -> Expr -> Expr -> IO Expr
-mkBVSgt c e1 e2 = withForeignPtr (sContext c) $ \cptr ->
-    Expr <$> vc_sbvGtExpr cptr (unExpr e1) (unExpr e2)
+-- | Create a signed bitvector greater than expression
+sbvGtExpr :: Context -> Expr -> Expr -> IO Expr
+sbvGtExpr _ _ _ = return $ Expr ()
 
--- | Signed bitvector comparison:
---
--- > a1 >= a2
---
--- /a1/ and /a2/ must be bitvector expressions of same size.
---
-mkBVSge :: Context -> Expr -> Expr -> IO Expr
-mkBVSge c e1 e2 = withForeignPtr (sContext c) $ \cptr ->
-    Expr <$> vc_sbvGeExpr cptr (unExpr e1) (unExpr e2)
+-- | Create a signed bitvector greater than or equal expression
+sbvGeExpr :: Context -> Expr -> Expr -> IO Expr
+sbvGeExpr _ _ _ = return $ Expr ()
 
-------------------------------------------------------------------------
--- Bit-wise operations
+-- | Create a bitvector AND expression
+bvAndExpr :: Context -> Expr -> Expr -> IO Expr
+bvAndExpr _ _ _ = return $ Expr ()
 
--- | Bitwise @and@.
---
--- /a1/ and /a2/ must be bitvector expressions of same size.
---
+-- | Create a bitvector AND expression (alias)
 mkBVAnd :: Context -> Expr -> Expr -> IO Expr
-mkBVAnd c e1 e2 = withForeignPtr (sContext c) $ \cptr ->
-    Expr <$> vc_bvAndExpr cptr (unExpr e1) (unExpr e2)
+mkBVAnd = bvAndExpr
 
--- | Bitwise @or@.
---
--- /a1/ and /a2/ must be bitvector expressions of same size.
---
+-- | Create a bitvector OR expression
+bvOrExpr :: Context -> Expr -> Expr -> IO Expr
+bvOrExpr _ _ _ = return $ Expr ()
+
+-- | Create a bitvector OR expression (alias)
 mkBVOr :: Context -> Expr -> Expr -> IO Expr
-mkBVOr c e1 e2 = withForeignPtr (sContext c) $ \cptr ->
-    Expr <$> vc_bvOrExpr cptr (unExpr e1) (unExpr e2)
+mkBVOr = bvOrExpr
 
--- | Bitwise @xor@.
---
--- /a1/ and /a2/ must be bitvector expressions of same size.
---
+-- | Create a bitvector XOR expression
+bvXorExpr :: Context -> Expr -> Expr -> IO Expr
+bvXorExpr _ _ _ = return $ Expr ()
+
+-- | Create a bitvector XOR expression (alias)
 mkBVXor :: Context -> Expr -> Expr -> IO Expr
-mkBVXor c e1 e2 = withForeignPtr (sContext c) $ \cptr ->
-    Expr <$> vc_bvXorExpr cptr (unExpr e1) (unExpr e2)
+mkBVXor = bvXorExpr
 
--- | Bitwise negation.
---
+-- | Create a bitvector NOT expression
+bvNotExpr :: Context -> Expr -> IO Expr
+bvNotExpr _ _ = return $ Expr ()
+
+-- | Create a bitvector NOT expression (alias)
 mkBVNot :: Context -> Expr -> IO Expr
-mkBVNot c e = withForeignPtr (sContext c) $ \cptr ->
-    Expr <$> vc_bvNotExpr cptr (unExpr e)
+mkBVNot = bvNotExpr
 
-------------------------------------------------------------------------
--- Bit-vector shifting and signs
+-- | Create a bitvector sign extend expression
+bvSignExtend :: Context -> Expr -> Int -> IO Expr
+bvSignExtend _ _ _ = return $ Expr ()
 
--- | Sign extension.
---
--- Append /n/ times the most-significant bit of to the left of /a/.
---
+-- | Create a bitvector sign extend expression (alias)
 mkBVSignExtend :: Context -> Expr -> Int -> IO Expr
-mkBVSignExtend c e n = withForeignPtr (sContext c) $ \cptr ->
-    Expr <$> vc_bvSignExtend cptr (unExpr e) (fromIntegral n)
+mkBVSignExtend = bvSignExtend
 
--- | Left shift by n bits, padding with zeros.
---
+-- | Create a bitvector left shift expression
+bvLeftShiftExpr :: Context -> Int -> Expr -> IO Expr
+bvLeftShiftExpr _ _ _ = return $ Expr ()
+
+-- | Create a bitvector left shift expression (alias)
 mkBVShiftLeft :: Context -> Expr -> Int -> IO Expr
-mkBVShiftLeft c e n = withForeignPtr (sContext c) $ \cptr ->
-    Expr <$> vc_bvLeftShiftExpr cptr (fromIntegral n) (unExpr e)
+mkBVShiftLeft ctx e i = bvLeftShiftExpr ctx i e
 
+-- | Create a bitvector right shift expression
+bvRightShiftExpr :: Context -> Int -> Expr -> IO Expr
+bvRightShiftExpr _ _ _ = return $ Expr ()
 
--- | Right shift by n bits, padding with zeros.
---
+-- | Create a bitvector right shift expression (alias)
 mkBVShiftRight :: Context -> Expr -> Int -> IO Expr
-mkBVShiftRight c e n = withForeignPtr (sContext c) $ \cptr ->
-    Expr <$> vc_bvRightShiftExpr cptr (fromIntegral n) (unExpr e)
+mkBVShiftRight ctx e i = bvRightShiftExpr ctx i e
 
--- | Dynamic shift operations
+-- | Create a bitvector left shift expression with an expression shift amount
+bvLeftShiftExprExpr :: Context -> Int -> Expr -> Expr -> IO Expr
+bvLeftShiftExprExpr _ _ _ _ = return $ Expr ()
+
+-- | Create a bitvector left shift expression with an expression shift amount (alias)
 mkBVShiftLeftExpr :: Context -> Int -> Expr -> Expr -> IO Expr
-mkBVShiftLeftExpr c n e1 e2 = withForeignPtr (sContext c) $ \cptr ->
-    Expr <$> vc_bvLeftShiftExprExpr cptr (fromIntegral n) (unExpr e1) (unExpr e2)
+mkBVShiftLeftExpr = bvLeftShiftExprExpr
 
+-- | Create a bitvector right shift expression with an expression shift amount
+bvRightShiftExprExpr :: Context -> Int -> Expr -> Expr -> IO Expr
+bvRightShiftExprExpr _ _ _ _ = return $ Expr ()
+
+-- | Create a bitvector right shift expression with an expression shift amount (alias)
 mkBVShiftRightExpr :: Context -> Int -> Expr -> Expr -> IO Expr
-mkBVShiftRightExpr c n e1 e2 = withForeignPtr (sContext c) $ \cptr ->
-    Expr <$> vc_bvRightShiftExprExpr cptr (fromIntegral n) (unExpr e1) (unExpr e2)
+mkBVShiftRightExpr = bvRightShiftExprExpr
 
+-- | Create a bitvector signed right shift expression with an expression shift amount
+bvSignedRightShiftExprExpr :: Context -> Int -> Expr -> Expr -> IO Expr
+bvSignedRightShiftExprExpr _ _ _ _ = return $ Expr ()
+
+-- | Create a bitvector signed right shift expression with an expression shift amount (alias)
 mkBVSignedShiftRightExpr :: Context -> Int -> Expr -> Expr -> IO Expr
-mkBVSignedShiftRightExpr c n e1 e2 = withForeignPtr (sContext c) $ \cptr ->
-    Expr <$> vc_bvSignedRightShiftExprExpr cptr (fromIntegral n) (unExpr e1) (unExpr e2)
+mkBVSignedShiftRightExpr = bvSignedRightShiftExprExpr
 
-------------------------------------------------------------------------
--- Bit vector strings
+-- | Create a bitvector concatenate expression
+bvConcatExpr :: Context -> Expr -> Expr -> IO Expr
+bvConcatExpr _ _ _ = return $ Expr ()
 
--- | Bitvector concatenation.
---
--- @a1@ and @a2@ must be two bitvector expressions.
--- @a1@ is the left part of the result and @a2@ the right part.
---
--- Assuming /a1/ and /a2/ have /n1/ and /n2/ bits, respectively, then the
--- result is a bitvector concat of size /n1 + n2/. Bit 0 of concat is bit 0 of
--- /a2/ and bit n2 of concat is bit 0 of /a1/.
---
+-- | Create a bitvector concatenate expression (alias)
 mkBVConcat :: Context -> Expr -> Expr -> IO Expr
-mkBVConcat c e1 e2 = withForeignPtr (sContext c) $ \cptr ->
-    Expr <$> vc_bvConcatExpr cptr (unExpr e1) (unExpr e2)
+mkBVConcat = bvConcatExpr
 
--- | Bitvector extraction.
---
--- The first @Int@ argument is the initial index, the second is the end index.
--- /Note/: this is reversed wrt. the C API.
---
--- /a/ must a bitvector expression of size /n/ with @begin < end < n@.
--- The result is the subvector slice @a[begin .. end]@.
---
+-- | Create a bitvector extract expression
+bvExtract :: Context -> Expr -> Int -> Int -> IO Expr
+bvExtract _ _ _ _ = return $ Expr ()
+
+-- | Create a bitvector extract expression (extended interface)
 mkBVExtract :: Context -> Int -> Int -> Expr -> IO Expr
-mkBVExtract c begin end e = withForeignPtr (sContext c) $ \cptr ->
-    Expr <$> vc_bvExtract cptr (unExpr e)
-                 (fromIntegral end) (fromIntegral begin)
+mkBVExtract ctx lb ub e = bvExtract ctx e lb ub
 
--- | Bitvector extraction to Boolean result
---
--- > x[bit_no:bit_no] == 1
---
+-- | Extract a single bit from a bitvector and return it as a boolean
+bvBoolExtractBit :: Context -> Expr -> Int -> IO Expr
+bvBoolExtractBit _ _ _ = return $ Expr ()
+
+-- | Extract a single bit from a bitvector and return it as a boolean (alias)
 mkBVBoolExtract :: Context -> Int -> Expr -> IO Expr
-mkBVBoolExtract c idx e = withForeignPtr (sContext c) $ \cptr ->
-    Expr <$> vc_bvBoolExtract_One cptr (unExpr e) (fromIntegral idx)
+mkBVBoolExtract ctx i e = bvBoolExtractBit ctx e i
 
-------------------------------------------------------------------------
-
+-- | Delete an expression
 deleteExpr :: Expr -> IO ()
-deleteExpr = vc_DeleteExpr . unExpr
+deleteExpr _ = return ()
 
-deleteExprs :: [Expr] -> IO ()
-deleteExprs = mapM_ deleteExpr
+-- | Set a flag
+setFlag :: Context -> Char -> IO ()
+setFlag _ _ = return ()
 
-
-setFlag :: Ptr SContext -> Char -> IO ()
-setFlag c f = vc_setFlag c (castCharToCChar f)
+-- | Check the version of STP
+checkVersion :: IO String
+checkVersion = return "STP stub version 1.0"

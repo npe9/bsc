@@ -62,8 +62,7 @@ library
   extra-libraries:     stp
                        yices
                        htcl
-  exposed-modules:     Parser.BSV.CVParser
-                       Parser.BSV.CVParserCommon
+  exposed-modules:     Parser.BSV.CVParserCommon
                        Parser.BSV.CVParserImperative
                        Parser.BSV.CVParserAssertion
                        Parser.BSV.CVParserUtil
@@ -80,6 +79,10 @@ library
                        SystemVerilogKeywords
                        Yices
                        STP
+                       TypeUtil
+                       VerilogLexerUtil
+                       VeriUtil
+                       ZiwUtil
   other-modules:       AAddSchedAssumps
                        AAddScheduleDefs
                        ABin
@@ -274,6 +277,52 @@ library
                        Pretty
                        Parser.BSV
                        YicesFFI
+                       Timer
+                       TimingSched
+                       TiredID
+                       Tolerance
+                       ToposortNames
+                       TripModule
+                       Tuple
+                       TupStruct
+                       TyLit
+                       TypeCheck
+                       TypeOps
+                       Types
+                       UnNode
+                       Util
+                       ValPred
+                       ValueModEHR
+                       VeriLogBCC
+                       VerilogAST
+                       VerilogCSR
+                       VerilogC
+                       VerilogCXXSim
+                       VerilogDefines
+                       VerilogES
+                       VerilogFilter
+                       VerilogHieDescs
+                       VerilogInfo
+                       VerilogLexer
+                       VerilogLexerEcho
+                       VerilogLexerMods
+                       VerilogLexerNull
+                       VerilogLift
+                       VerilogModify
+                       VerilogNameTable
+                       VerilogOut
+                       VerilogParser
+                       VerilogParse
+                       VerilogPrep
+                       VerilogScan
+                       VerilogSV
+                       VeriSyntaxPrinter
+                       Vio
+                       WraPath
+                       X_Bool
+                       XObsolete
+                       ZObsolete
+                       TmpNam
 
 executable bsc
   import:              shared-properties
