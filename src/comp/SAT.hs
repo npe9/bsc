@@ -23,8 +23,8 @@ import qualified AExpr2Yices as Yices
          (YState, initYState, checkBiImplication, isConstExpr,
           checkEq, checkNotEq)
 
-import STP(checkVersion)
-import Yices(checkVersion)
+import qualified STP(checkVersion)
+import qualified Yices(checkVersion)
 
 -- -------------------------
 
@@ -55,7 +55,9 @@ checkSATFlags eh f =
                  in  CE.catch (Yices.checkVersion >> return True) handler
 
       hasSTP :: IO Bool
-      hasSTP = STP.checkVersion
+      hasSTP = let handler :: CE.SomeException -> IO Bool
+                   handler _ = return False
+               in CE.catch (STP.checkVersion >> return True) handler
 
       checkFn :: String -> String -> IO Bool -> IO Flags
       checkFn flag_str lib_str hasFn = do

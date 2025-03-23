@@ -1,6 +1,6 @@
 {-# LANGUAGE CPP #-}
 {-# LANGUAGE TypeSynonymInstances, FlexibleInstances #-}
-{-# OPTIONS_GHC -Werror -fwarn-incomplete-patterns #-}
+{-# OPTIONS_GHC -Werror -fwarn-incomplete-patterns -fno-warn-partial-fields #-}
 -- This is used to guarantee that getErrorText covers all the cases
 -- Note that the OPTIONS line must be first !!!!
 
@@ -973,11 +973,11 @@ data ErrMsg =
 
         | WCycleDrop String String [String]
         | WUrgencyChoice { em_more_urgent :: Doc,
-                           em_less_urgent :: Doc,
-                           em_conflicts :: Doc }
+                          em_less_urgent :: Doc,
+                          em_conflicts :: Doc }
         | WEarlinessChoice { em_more_early :: Doc,
-                             em_less_early :: Doc,
-                             em_conflicts :: Doc }
+                            em_less_early :: Doc,
+                            em_conflicts :: Doc }
         | WActionShadowing String String [String]
         | EMERulesIdentical String String
         | WRuleNeverFires String Bool

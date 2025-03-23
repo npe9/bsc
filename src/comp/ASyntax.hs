@@ -326,7 +326,6 @@ instance PPrint ASPSignalInfo where
                        $+$ text "Output Resets" <+> pPrint d p (aspsi_output_rsts aspsi)
                        $+$ text "Inouts" <+> pPrint d p (aspsi_ifc_iots aspsi)
                        $+$ text "Methods" <+> pPrint d p (aspsi_methods aspsi)
-                       -- $+$ text "Inlined Ports" <+> pPrint d p (aspsi_inlined_ports aspsi)
                        )
 
         --   relation from method name to

@@ -1,6 +1,6 @@
 cabal-version:      3.0
 name:               bsc
-version:            2024.3
+version:            2024.3.0
 synopsis:          Bluespec Compiler
 description:       The Bluespec Compiler (BSC) is a compiler and simulator for the Bluespec Hardware Description Language.
 homepage:          https://github.com/B-Lang-org/bsc
@@ -15,14 +15,28 @@ extra-doc-files:   README.md
                    INSTALL.md
                    DEVELOP.md
 tested-with:       GHC == 9.4.7
+extra-source-files: testsuite/config/*.tcl
+                   , testsuite/lib/*.exp
+                   , testsuite/bsc.evaluator/**/*.exp
+                   , testsuite/bsc.typechecker/**/*.exp
+                   , testsuite/bsc.lib/**/*.exp
+                   , testsuite/bsc.if/**/*.exp
+                   , testsuite/bsc.names/**/*.exp
+                   , testsuite/bsc.bluetcl/**/*.exp
+                   , testsuite/bsc.interra/**/*.exp
+                   , testsuite/bsc.bluesim/**/*.exp
+                   , testsuite/bsc.bugs/bluespec_inc/**/*.exp
+                   , testsuite/bsc.bugs/github/**/*.exp
+                   , testsuite/bsc.bugs/pre_bluespec_inc/**/*.exp
+                   , testsuite/site.exp
 
 common common-options
     default-language: Haskell2010
     ghc-options:      -Wall
                       -Wcompat
                       -Widentities
-                      -Wincomplete-uni-patterns
-                      -Wincomplete-record-updates
+                      -Wno-incomplete-uni-patterns
+                      -Wno-incomplete-record-updates
                       -fno-warn-orphans
                       -fno-warn-name-shadowing
                       -fno-warn-unused-matches
@@ -39,15 +53,33 @@ common common-options
 library
     import:           common-options
     hs-source-dirs:   src/comp
-                      src/Parsec
                       src/Libraries
                       src/comp/Libs
                       src/vendor/yices/v2.6/HaskellIfc
                       src/vendor/stp/HaskellIfc
                       src/vendor/htcl
                       src/comp/GHC/posix
-    exposed-modules:  Util
-                   , BSC
+                      src/comp/Parser/BSV
+    build-depends:    base ==4.13.0.0
+                   , array ==0.5.4.0
+                   , containers ==0.6.2.1
+                   , directory ==1.3.6.0
+                   , filepath ==1.4.2.1
+                   , mtl ==2.2.2
+                   , parsec >=3.1.14.0 && <3.2
+                   , process ==1.6.9.0
+                   , syb ==0.7.2.4
+                   , unix ==2.7.2.2
+                   , split ==0.2.5
+                   , text ==1.2.4.0
+                   , bytestring ==0.10.10.1
+                   , regex-compat ==0.95.2.2
+                   , old-time ==1.1.0.4
+                   , time ==1.9.3
+                   , integer-gmp ==1.0.2.0
+                   , gitrev >=1.3.1
+    exposed-modules:  BSC
+                   , Util
                    , VCD
                    , VFileName
                    , VFinalCleanup
@@ -209,6 +241,13 @@ library
                    , STPFFI
                    , HTcl
                    , BlueTcl
+                   , Parser.BSV.CVParser
+                   , Parser.BSV.CVParserCommon
+                   , Parser.BSV.CVParserImperative
+                   , Parser.BSV.CVParserAssertion
+                   , Parser.BSV.CVParserUtil
+                   , CPackageTime
+                   , GitInfo
     other-modules:    ADumpSchedule
                    , BinParse
                    , BinUtil
@@ -221,116 +260,161 @@ library
                    , GlobPattern
                    , MVarStrict
                    , Parse
-                   , Parsec
-                   , ParsecChar
-                   , ParsecCombinator
-                   , ParsecExpr
-                   , ParsecPrim
                    , Parser.BSV
-                   , Parser.BSV.CVParser
-                   , Parser.BSV.CVParserAssertion
-                   , Parser.BSV.CVParserCommon
-                   , Parser.BSV.CVParserImperative
-                   , Parser.BSV.CVParserUtil
                    , Parser.Classic
                    , Parser.Classic.CParser
                    , Parser.Classic.Warnings
                    , SystemVerilogPreprocess
                    , SystemVerilogScanner
                    , TmpNam
-    default-language: Haskell2010
-    ghc-options:      -Wall -Wcompat -Widentities -Wincomplete-uni-patterns
-                      -Wincomplete-record-updates -fno-warn-orphans
-                      -fno-warn-name-shadowing -fno-warn-unused-matches
-                      -Wredundant-constraints -fhide-source-paths -Wmissing-export-lists
-                      -Wpartial-fields
-    build-depends:
-        array,
-        base >= 4.7 && < 5,
-        bytestring,
-        containers,
-        directory,
-        filepath,
-        ghc-prim,
-        integer-gmp,
-        mtl,
-        old-time,
-        parsec,
-        process,
-        regex-compat,
-        sort,
-        split,
-        syb,
-        text,
-        time,
-        transformers,
-        unix
+                   , AAddSchedAssumps
+                   , AAddScheduleDefs
+                   , ACheck
+                   , ACleanup
+                   , ADropDefs
+                   , ADropUndet
+                   , ANoInline
+                   , APaths
+                   , AProofs
+                   , ARankMethCalls
+                   , ARemoveAssumps
+                   , ARenameIO
+                   , ASchedule
+                   , AState
+                   , ATaskSplice
+                   , AVeriQuirks
+                   , AVerilog
+                   , BuildSystem
+                   , DOT
+                   , DPIWrappers
+                   , Deriving
+                   , DisjointTest
+                   , EquivalenceClass
+                   , Exceptions
+                   , FixupDefs
+                   , GenForeign
+                   , GenSign
+                   , GenWrap
+                   , GraphPaths
+                   , IDropRules
+                   , IExpand
+                   , IExpandUtils
+                   , IInlineFmt
+                   , ILift
+                   , ISimplify
+                   , ISplitIf
+                   , ISyntaxCheck
+                   , ISyntaxXRef
+                   , InlineWires
+                   , LambdaCalc
+                   , Libs.Parse
 
 executable bsc
     import:           common-options
     hs-source-dirs:   src/exec
     main-is:          Main.hs
-    build-depends:    base >= 4.7 && < 5
-                    , bsc
-                    , containers
-                    , mtl
-                    , process
-                    , directory
-                    , filepath
+    build-depends:    bsc
+                   , base ==4.13.0.0
+                   , directory ==1.3.6.0
+                   , filepath ==1.4.2.1
+                   , process ==1.6.9.0
+                   , unix ==2.7.2.2
+                   , gitrev >=1.3.1
+                   , array ==0.5.4.0
+                   , containers ==0.6.2.1
+                   , mtl ==2.2.2
+                   , parsec ==3.1.14.0
+                   , split ==0.2.5
+                   , text ==1.2.4.0
+                   , bytestring ==0.10.10.1
+                   , regex-compat ==0.95.2.2
+                   , old-time ==1.1.0.4
+                   , time ==1.9.3
+                   , integer-gmp ==1.0.2.0
 
 executable bluetcl
     import:           common-options
     hs-source-dirs:   src/bluetcl src/comp
-    c-sources:        src/comp/bluetcl_Main.c
+    c-sources: src/vendor/htcl/haskell.c
     main-is:          Main.hs
-    build-depends:    base >= 4.7 && < 5
-                    , bsc
-                    , containers
-                    , mtl
-                    , process
+    build-depends:    bsc
+                   , base ==4.13.0.0
+                   , directory ==1.3.6.0
+                   , filepath ==1.4.2.1
+                   , process ==1.6.9.0
+                   , unix ==2.7.2.2
+                   , gitrev >=1.3.1
+                   , array ==0.5.4.0
+                   , containers ==0.6.2.1
+                   , mtl ==2.2.2
+                   , parsec ==3.1.14.0
+                   , split ==0.2.5
+                   , text ==1.2.4.0
+                   , bytestring ==0.10.10.1
+                   , regex-compat ==0.95.2.2
+                   , old-time ==1.1.0.4
+                   , time ==1.9.3
+                   , integer-gmp ==1.0.2.0
     extra-libraries:  tcl
-    build-tool-depends: hsc2hs:hsc2hs -any
+                    , htcl
+    build-tool-depends: hsc2hs:hsc2hs
     other-modules:    BlueTcl
-    default-language: Haskell2010
-    ghc-options:      -Wall -Wcompat -Widentities -Wincomplete-uni-patterns
-                      -Wincomplete-record-updates -fno-warn-orphans
-                      -fno-warn-name-shadowing -fno-warn-unused-matches
-                      -Wredundant-constraints -fhide-source-paths -Wmissing-export-lists
-                      -Wpartial-fields
 
 test-suite bsc-test
     import:           common-options
     type:            exitcode-stdio-1.0
     hs-source-dirs:  testsuite
-    main-is:         Main.hs
-    build-depends:   base >= 4.7 && < 5
-                   , bsc
-                   , containers
-                   , mtl
-                   , process
-                   , directory
-                   , filepath
-                   , tasty
-                   , tasty-hunit
-                   , tasty-quickcheck
+    main-is:         TestMain.hs
+    build-depends:    base ==4.13.0.0
+                    , array ==0.5.4.0
+                    , containers ==0.6.2.1
+                    , directory ==1.3.6.0
+                    , filepath ==1.4.2.1
+                    , mtl ==2.2.2
+                    , parsec ==3.1.14.0
+                    , process ==1.6.9.0
+                    , syb ==0.7.2.4
+                    , unix ==2.7.2.2
+                    , split ==0.2.5
+                    , text ==1.2.4.0
+                    , bytestring ==0.10.10.1
+                    , regex-compat ==0.95.2.2
+                    , old-time ==1.1.0.4
+                    , time ==1.9.3
+                    , integer-gmp ==1.0.2.0
+                    , bsc
+                    , tasty
+                    , tasty-hunit
+                    , tasty-quickcheck
+                    , optparse-applicative ==0.15.1.0
 
 test-suite dejagnu-tests
     import:           common-options
-    type:            detailed-0.9
-    test-module:     DejaGNUDriver
-    hs-source-dirs:  testsuite/dejagnu-driver
-    other-modules:   DejaGNUTest
-    build-depends:   base >= 4.7 && < 5
-                   , Cabal >= 3.0
-                   , process
-                   , directory
-                   , filepath
-                   , text
-    
-    -- Test data files that need to be available during testing
-    extra-source-files: testsuite/config/*.tcl
-                     , testsuite/lib/*.exp
-                     , testsuite/scripts/*.exp
-                     , testsuite/bsc.*/*.exp
-                     , testsuite/bsc.*/*/*.exp
-                     , testsuite/site.exp
+    type:            exitcode-stdio-1.0
+    main-is:         TestMain.hs
+    hs-source-dirs:  testsuite
+    other-modules:   DejaGNUDriver
+                   , DejaGNUTest
+    build-depends:    base ==4.13.0.0
+                    , array ==0.5.4.0
+                    , containers ==0.6.2.1
+                    , directory ==1.3.6.0
+                    , filepath ==1.4.2.1
+                    , mtl ==2.2.2
+                    , parsec ==3.1.14.0
+                    , process ==1.6.9.0
+                    , syb ==0.7.2.4
+                    , unix ==2.7.2.2
+                    , split ==0.2.5
+                    , text ==1.2.4.0
+                    , bytestring ==0.10.10.1
+                    , regex-compat ==0.95.2.2
+                    , old-time ==1.1.0.4
+                    , time ==1.9.3
+                    , integer-gmp ==1.0.2.0
+                    , bsc
+                    , Cabal >=3.0
+                    , tasty
+                    , tasty-hunit
+                    , tasty-quickcheck
+                    , optparse-applicative ==0.15.1.0

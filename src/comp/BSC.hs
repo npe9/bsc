@@ -942,11 +942,11 @@ genModule
                 ++ lines (pretty 78 78 (vcat (dumpMethodBVIInfo methodConflict)) )
             | otherwise = []
     -- Additional info from the Verilog backend
-    -- * veriPortProps =
+    -- veriPortProps:
     --           IO properties which can be included as attributes in the
     --           Cmoduleverilog (import-BVI)
     --           XXX it would be nice if the Bluesim backend had the same info
-    -- * vprog = the Verilog data structure, for recording in the .ba file,
+    -- vprog: the Verilog data structure, for recording in the .ba file,
     --           so that it's available to bluetcl
     (t, veriPortProps, vprog)
         <- if (backend flags == Just Verilog)
@@ -1201,8 +1201,8 @@ genModuleVerilog errh pprops flags dumpnames time0 prefix moduleName
        t <- dump errh flags t DFwriteVerilog dumpnames vfilenames
 
        -- Return
-       -- * the port properties (to be included in the import-BVI)
-       -- * the Verilog structure (for accessing in bluetcl)
+       -- The port properties (to be included in the import-BVI)
+       -- The Verilog structure (for accessing in bluetcl)
        return (t, ips, vprog)
 
 

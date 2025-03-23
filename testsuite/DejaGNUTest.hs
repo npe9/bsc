@@ -1,11 +1,14 @@
-module DejaGNUTest where
+module DejaGNUTest (
+    TestExpectation(..)
+  , parseExpFile
+  , verifyExpectations
+) where
 
 import System.FilePath
 import System.Directory
 import System.Process
 import System.Exit
-import qualified Data.Text as T
-import qualified Data.Text.IO as TIO
+import Data.List (isInfixOf)
 
 -- Types for test expectations
 data TestExpectation = 
@@ -18,20 +21,20 @@ data TestExpectation =
 -- Parse a DejaGNU .exp file to extract test expectations
 parseExpFile :: FilePath -> IO [TestExpectation]
 parseExpFile expFile = do
-  contents <- TIO.readFile expFile
-  let lines = T.lines contents
-      expectations = map parseExpectation lines
+  contents <- readFile expFile
+  let lines' = lines contents
+      expectations = map parseExpectation lines'
   return $ concat expectations
 
 -- Parse a single line of an .exp file
-parseExpectation :: T.Text -> [TestExpectation]
+parseExpectation :: String -> [TestExpectation]
 parseExpectation line
-  | "pass" `T.isInfixOf` line = [ExpectSuccess]
-  | "fail" `T.isInfixOf` line = [ExpectFailure]
-  | "expect" `T.isInfixOf` line = 
-      let output = T.unpack $ T.strip $ T.dropWhile (/= '{') $ T.drop 6 line
-       in if not (null output) then [ExpectOutput output] else []
-  | "xfail" `T.isInfixOf` line = [ExpectFailure]  -- Expected failure
+  | "pass" `isInfixOf` line = [ExpectSuccess]
+  | "fail" `isInfixOf` line = [ExpectFailure]
+  | "expect" `isInfixOf` line = 
+      let output = drop 1 $ dropWhile (/= '{') $ drop 6 line
+       in [ExpectOutput output | not (null output)]
+  | "xfail" `isInfixOf` line = [ExpectFailure]  -- Expected failure
   | otherwise = []
 
 -- Verify test results against expectations
@@ -42,7 +45,9 @@ verifyExpectations expectations exitCode stdout stderr =
 -- Check if a single expectation was met
 checkExpectation :: TestExpectation -> ExitCode -> String -> String -> Bool
 checkExpectation ExpectSuccess exitCode _ _ = exitCode == ExitSuccess
-checkExpectation ExpectFailure exitCode _ _ = exitCode /= ExitSuccess
+checkExpectation ExpectFailure exitCode _ _ = 
+  -- Only return True if this was an expected failure
+  exitCode /= ExitSuccess
 checkExpectation (ExpectOutput text) _ stdout stderr = 
   text `elem` lines stdout || text `elem` lines stderr
 checkExpectation (ExpectNoOutput text) _ stdout stderr = 

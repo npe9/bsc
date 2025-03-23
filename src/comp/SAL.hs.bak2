@@ -170,7 +170,16 @@ data SDefn = SDComment SComment [SDefn]
            -- SDModule
            deriving (Eq, Show)
 
-data SType = STVar SQId | STArray Integer SType | STTuple [SType] | STFunc SType SType | STRecord [(SId, SType)] deriving (Eq, Show)
+data SType = STVar SQId
+           -- for us, arrays are always indexed by subtype starting at zero
+           -- so the number here is the size
+           | STArray Integer SType
+           -- | STSub
+           | STTuple [SType]
+           | STFunc SType SType
+           | STRecord [(SId, SType)]
+           -- | STState
+           deriving (Eq, Show)
 
 data SExpr = SLam [(SId, SType)] SExpr
            | SLet [(SId, SType, SExpr)] SExpr

@@ -38,7 +38,8 @@ import Parser.BSV(bsvParseString)
 import CSyntax
 import GenFuncWrap(makeGenFuncId)
 import IOUtil(getEnvDef, progArgs)
-import TopUtils
+import TopUtils(TimeInfo, getNow, dfltCCompile, start, dump, putInDir)
+import CPackageTime hiding (TimeInfo, getNow)
 --import Debug.Trace
 
 outlaw_sv_kws_as_classic_ids :: Bool

@@ -507,7 +507,7 @@ unpack_method_call' poss (IAps (ICon i_function _) _ts _es) =
 unpack_method_call' poss (ICon i_function _) =
   let i_function' = addIdInlinedPositions i_function poss
   in  [(mk_homeless_id "FUNCTION", i_function')]
-  -- seen in Sudoku with high order functional programming (displayGrid)
+  -- ^seen in Sudoku with high order functional programming (displayGrid)
 unpack_method_call' _ e =
   internalError("unpack_method_call': unknown: " ++ ppReadable e)
   -- trace ("unpack_method_call unable to match " ++ show e) $

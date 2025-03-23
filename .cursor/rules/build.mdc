@@ -1,0 +1,14 @@
+---
+description: 
+globs: 
+alwaysApply: true
+---
+
+# Your rule content
+
+- The system should use cabal to build
+- we are trying to move from makefiles to cabal as a build system
+- we are also trying to modernize the bluespec project to use modern haskell
+- do not alter the bs and bsv files, if the compiler can't compile them it's doing something wrong
+
+

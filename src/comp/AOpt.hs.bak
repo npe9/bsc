@@ -862,7 +862,7 @@ aPrim bflags aid dty op [x,y]
       -- Semantically, this seems correct for Verilog,
       -- but it is more predictable to retain === and
       -- let the chips (e.g. -unspecified-to) fall where they may.
-      -- op == PrimEQ3 -- | op == PrimEQ3 && any isASAny [x,y] = return aFalse-- | op == PrimEQ3 && any isASAny [x,y] = return aFalse any isASAny [x,y] = return aFalse
+      -- | op == PrimEQ3 && any isASAny [x,y] = return aFalse
       | op `elem` [ PrimEQ, PrimEQ3 ]  && all isConst [x,y] =
           return $ if (x == y) then aTrue else aFalse
 

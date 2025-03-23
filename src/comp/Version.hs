@@ -1,8 +1,11 @@
+{-# LANGUAGE TemplateHaskell #-}
 module Version(bluespec, bscVersionStr, versionStr, versionname,
-               copyright, buildnum
+               copyright, buildnum, gitHash, gitBranch, gitDirty
               ) where
 
-import BuildVersion(buildVersion, buildVersionNum, buildVersionName)
+import Data.Maybe (fromMaybe)
+import GitInfo
+import Development.GitRev
 
 {-# NOINLINE bluespec #-}
 {-# NOINLINE versionname #-}
@@ -11,17 +14,12 @@ import BuildVersion(buildVersion, buildVersionNum, buildVersionName)
 bluespec :: String
 bluespec = "Bluespec"
 
+-- Version information
 versionname :: String
-versionname = buildVersionName
-
-buildname :: String
-buildname = buildVersionName
+versionname = version
 
 buildnum :: Integer
-buildnum = read buildVersionNum
-
-buildstr :: String
-buildstr = buildVersion
+buildnum = read ("0x" ++ take 8 gitHash) :: Integer
 
 -- Generate the version string (for a given tool)
 versionStr :: Bool -> String -> String
@@ -30,8 +28,9 @@ versionStr showVersion toolname
   | otherwise =
     let emptyOr a b = if null a then a else b
         versionstr  = versionname `emptyOr` (", version " ++ versionname)
-        buildstr    = buildVersion `emptyOr` (" (build " ++ buildVersion ++ ")")
-  in  concat [toolname, versionstr, buildstr]
+        buildInfo   = gitHash `emptyOr` (" (build " ++ gitHash ++ dirtyFlag ++ ")")
+        dirtyFlag   = if gitDirty then "-dirty" else ""
+    in  concat [toolname, versionstr, buildInfo]
 
 -- The version string for BSC
 bscVersionStr :: Bool -> String
@@ -43,3 +42,15 @@ copyright = unlines copyrights
 copyrights :: [String]
 copyrights = ["This is free software; for source code and copying conditions, see",
               "https://github.com/B-Lang-org/bsc"]
+
+-- Get git hash
+gitHash :: String
+gitHash = $(gitHash)
+
+-- Get git branch
+gitBranch :: String
+gitBranch = $(gitBranch)
+
+-- Get whether working directory is dirty
+gitDirty :: Bool
+gitDirty = $(gitDirtyTracked)

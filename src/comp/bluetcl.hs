@@ -903,7 +903,7 @@ tclType ["constr",con] = do
       flags  = tp_flags g
   --
   typeid <- pStringWrapper globalErrHandle flags pQualConstructor [con]
-  let econs = either Left (lookupAndShowTypeInfo symtab) typeid
+  let econs = either Left (lookupAndShowTypeInfo symtab . snd) typeid
   case econs of
     Left err -> do reportErrorsToTcl [] err
                    return $ TLst [] -- reachable only if no errors

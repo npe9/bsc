@@ -8,7 +8,7 @@ documentation: True
 tests: True
 
 test-show-details: direct
-test-options: --test-option=--color=always
+test-options: 
 
 package bsc
   -- Enable all test suites by default
