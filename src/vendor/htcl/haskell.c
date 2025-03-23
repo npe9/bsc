@@ -6,6 +6,16 @@
 
 #include "tcl.h"
 
+// Export symbols
+#ifdef __APPLE__
+#define EXPORT __attribute__((visibility("default")))
+#else
+#define EXPORT
+#endif
+
+EXPORT int htcl_initHaskellRTS(int *argc, char **argv[]);
+EXPORT void htcl_finalizeTclObj(Tcl_Obj* o);
+
 // initialize the haskell runtime system
 int
 htcl_initHaskellRTS(int *argc, char **argv[])

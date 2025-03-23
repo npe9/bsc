@@ -331,6 +331,9 @@ executable bsc
                    , old-time ==1.1.0.4
                    , time ==1.9.3
                    , integer-gmp ==1.0.2.0
+    extra-libraries: htcl, tcl
+    include-dirs: src/vendor/htcl
+    extra-lib-dirs: src/vendor/htcl
 
 executable bluetcl
     import:           common-options
@@ -355,8 +358,9 @@ executable bluetcl
                    , old-time ==1.1.0.4
                    , time ==1.9.3
                    , integer-gmp ==1.0.2.0
-    extra-libraries:  tcl
-                    , htcl
+    extra-libraries: tcl, htcl
+    include-dirs: src/vendor/htcl
+    extra-lib-dirs: src/vendor/htcl
     build-tool-depends: hsc2hs:hsc2hs
     other-modules:    BlueTcl
 

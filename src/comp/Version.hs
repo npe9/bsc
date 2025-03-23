@@ -1,11 +1,18 @@
 {-# LANGUAGE TemplateHaskell #-}
-module Version(bluespec, bscVersionStr, versionStr, versionname,
-               copyright, buildnum, gitHash, gitBranch, gitDirty
-              ) where
+module Version
+    ( bluespec
+    , bscVersionStr
+    , versionStr
+    , versionname
+    , copyright
+    , buildnum
+    , gitHash
+    , gitBranch
+    , gitDirty
+    , gitDescribe
+    ) where
 
-import Data.Maybe (fromMaybe)
-import GitInfo
-import Development.GitRev
+import qualified GitInfo
 
 {-# NOINLINE bluespec #-}
 {-# NOINLINE versionname #-}
@@ -19,7 +26,7 @@ versionname :: String
 versionname = version
 
 buildnum :: Integer
-buildnum = read ("0x" ++ take 8 gitHash) :: Integer
+buildnum = read ("0x" ++ take 8 GitInfo.gitHash) :: Integer
 
 -- Generate the version string (for a given tool)
 versionStr :: Bool -> String -> String
@@ -28,29 +35,34 @@ versionStr showVersion toolname
   | otherwise =
     let emptyOr a b = if null a then a else b
         versionstr  = versionname `emptyOr` (", version " ++ versionname)
-        buildInfo   = gitHash `emptyOr` (" (build " ++ gitHash ++ dirtyFlag ++ ")")
-        dirtyFlag   = if gitDirty then "-dirty" else ""
+        buildInfo   = GitInfo.gitHash `emptyOr` (" (build " ++ GitInfo.gitHash ++ dirtyFlag ++ ")")
+        dirtyFlag   = if GitInfo.gitDirty then "-dirty" else ""
     in  concat [toolname, versionstr, buildInfo]
 
 -- The version string for BSC
 bscVersionStr :: Bool -> String
 bscVersionStr showVersion = versionStr showVersion (bluespec ++ " Compiler")
 
-copyright :: String
-copyright = unlines copyrights
+-- | Get the version string
+version :: String
+version = GitInfo.gitHash
 
-copyrights :: [String]
-copyrights = ["This is free software; for source code and copying conditions, see",
-              "https://github.com/B-Lang-org/bsc"]
-
--- Get git hash
+-- | Get the git hash
 gitHash :: String
-gitHash = $(gitHash)
+gitHash = GitInfo.gitHash
 
--- Get git branch
+-- | Get the current branch
 gitBranch :: String
-gitBranch = $(gitBranch)
+gitBranch = GitInfo.gitBranch
 
--- Get whether working directory is dirty
+-- | Check if the working directory is dirty
 gitDirty :: Bool
-gitDirty = $(gitDirtyTracked)
+gitDirty = GitInfo.gitDirty
+
+-- | Get a full git description including tags if available
+gitDescribe :: String
+gitDescribe = GitInfo.gitDescribe
+
+-- | Copyright information
+copyright :: String
+copyright = "Copyright (c) 2025 Bluespec, Inc. All Rights Reserved."
