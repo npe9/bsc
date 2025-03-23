@@ -1,16 +1,18 @@
 packages: .
+          src/vendor/htcl
 
 package bsc
-  ghc-options: -j
+    ghc-options: -fPIC
+
+package htcl
+    ghc-options: -fPIC
 
 optimization: 2
 documentation: True
 tests: True
 
 test-show-details: direct
-test-options: 
 
 package bsc
-  -- Enable all test suites by default
-  tests: True
-  test-show-details: direct 
+    tests: True
+    test-show-details: direct 

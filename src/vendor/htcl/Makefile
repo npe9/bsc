@@ -20,11 +20,7 @@ endif
 
 # -----
 
-# Get GHC include paths
-GHC_LIBDIR = $(shell ghc --print-libdir)
-GHC_INCLUDE = -I$(GHC_LIBDIR)/include
-
-CFLAGS += -Wall ${TCL_INC_FLAGS} $(GHC_INCLUDE)
+CFLAGS += -Wall ${TCL_INC_FLAGS}
 CC ?= cc
 
 # -----

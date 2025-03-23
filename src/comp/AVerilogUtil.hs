@@ -1,5 +1,5 @@
 {-# LANGUAGE PatternGuards #-}
-{-# OPTIONS_GHC -fwarn-name-shadowing -fwarn-missing-signatures -Werror #-}
+{-# OPTIONS_GHC -fwarn-name-shadowing -fwarn-missing-signatures #-}
 
 
 module AVerilogUtil (

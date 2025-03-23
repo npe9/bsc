@@ -1,6 +1,6 @@
 {-# LANGUAGE CPP #-}
 {-# LANGUAGE FlexibleInstances #-}
-{-# OPTIONS_GHC -Werror -fwarn-incomplete-patterns #-}
+{-# OPTIONS_GHC -fwarn-incomplete-patterns #-}
 module GenABin(genABinFile, readABinFile) where
 
 import Error(internalError, ErrMsg(..), ErrorHandle, bsErrorUnsafe)

@@ -1,0 +1,21 @@
+cabal-version: 3.0
+name: htcl
+version: 0.1.0.0
+synopsis: Haskell Tcl library
+description: A Haskell library for Tcl interoperability.
+license: BSD-3-Clause
+author: Bluespec Inc.
+maintainer: Bluespec Inc.
+
+library
+  default-language: Haskell2010
+  exposed-modules: HTcl
+  build-depends: base >=4.8 && <5
+               , time >=1.9 && <2.0
+  c-sources: haskell.c
+  include-dirs: ${pkgroot}/include
+  cc-options: -Wall -DTCL86
+  extra-libraries: tcl8.6
+  ghc-options: -Wall
+  install-includes: HTcl.h
+  extra-lib-dirs: ${pkgroot}/lib 

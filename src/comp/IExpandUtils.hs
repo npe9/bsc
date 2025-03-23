@@ -3110,8 +3110,8 @@ getMethodsWithWires :: HExpr -> G [WireBlobTuple]
 getMethodsWithWires e =
     let
         ?mkvar = \ instId methId v ->
-            let clk = getMethodClock methId v
-                rst = getMethodReset methId v
+            let rst = getMethodReset methId v
+                clk = getMethodClock methId v
                 mstr = (getIdBaseString instId) ++ "." ++ (getIdBaseString methId)
                 clk_dom = getClockDomain clk
             in  return [(instId, methId, mstr, clk_dom, clk, rst)]

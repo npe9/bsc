@@ -1,0 +1,31 @@
+package bsc
+    ghc-options: -fPIC
+    extra-lib-dirs: src/vendor/yices/v2.6/yices2-inst/lib
+    extra-include-dirs: src/vendor/yices/v2.6/yices2-inst/include
+    extra-libraries: yices, gmp
+
+package htcl
+    ghc-options: -fPIC
+    extra-lib-dirs: ${pkgroot}/lib
+    extra-include-dirs: ${pkgroot}/include
+
+with-compiler: ghc-9.4.7
+
+-- Architecture settings
+package bsc
+    if os(darwin)
+        if arch(aarch64)
+            cc-options: -arch arm64
+            ld-options: -arch arm64
+        else
+            cc-options: -arch x86_64
+            ld-options: -arch x86_64
+
+package htcl
+    if os(darwin)
+        if arch(aarch64)
+            cc-options: -arch arm64
+            ld-options: -arch arm64
+        else
+            cc-options: -arch x86_64
+            ld-options: -arch x86_64

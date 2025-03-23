@@ -15,20 +15,20 @@ extra-doc-files:   README.md
                    INSTALL.md
                    DEVELOP.md
 tested-with:       GHC == 9.4.7
-extra-source-files: testsuite/config/*.tcl
-                   , testsuite/lib/*.exp
-                   , testsuite/bsc.evaluator/**/*.exp
-                   , testsuite/bsc.typechecker/**/*.exp
-                   , testsuite/bsc.lib/**/*.exp
-                   , testsuite/bsc.if/**/*.exp
-                   , testsuite/bsc.names/**/*.exp
-                   , testsuite/bsc.bluetcl/**/*.exp
-                   , testsuite/bsc.interra/**/*.exp
-                   , testsuite/bsc.bluesim/**/*.exp
-                   , testsuite/bsc.bugs/bluespec_inc/**/*.exp
-                   , testsuite/bsc.bugs/github/**/*.exp
-                   , testsuite/bsc.bugs/pre_bluespec_inc/**/*.exp
-                   , testsuite/site.exp
+extra-source-files: ${pkgroot}/testsuite/config/*.tcl
+                   , ${pkgroot}/testsuite/lib/*.exp
+                   , ${pkgroot}/testsuite/bsc.evaluator/**/*.exp
+                   , ${pkgroot}/testsuite/bsc.typechecker/**/*.exp
+                   , ${pkgroot}/testsuite/bsc.lib/**/*.exp
+                   , ${pkgroot}/testsuite/bsc.if/**/*.exp
+                   , ${pkgroot}/testsuite/bsc.names/**/*.exp
+                   , ${pkgroot}/testsuite/bsc.bluetcl/**/*.exp
+                   , ${pkgroot}/testsuite/bsc.interra/**/*.exp
+                   , ${pkgroot}/testsuite/bsc.bluesim/**/*.exp
+                   , ${pkgroot}/testsuite/bsc.bugs/bluespec_inc/**/*.exp
+                   , ${pkgroot}/testsuite/bsc.bugs/github/**/*.exp
+                   , ${pkgroot}/testsuite/bsc.bugs/pre_bluespec_inc/**/*.exp
+                   , ${pkgroot}/testsuite/site.exp
 
 common common-options
     default-language: Haskell2010
@@ -60,24 +60,25 @@ library
                       src/vendor/htcl
                       src/comp/GHC/posix
                       src/comp/Parser/BSV
-    build-depends:    base ==4.13.0.0
-                   , array ==0.5.4.0
-                   , containers ==0.6.2.1
-                   , directory ==1.3.6.0
-                   , filepath ==1.4.2.1
-                   , mtl ==2.2.2
+    build-depends:    base >=4.13.0.0 && <4.18
+                   , array >=0.5.4.0 && <0.6
+                   , containers >=0.6.2.1 && <0.7
+                   , directory >=1.3.6.0 && <1.4
+                   , filepath >=1.4.2.1 && <1.5
+                   , mtl >=2.2.2 && <2.3
                    , parsec >=3.1.14.0 && <3.2
-                   , process ==1.6.9.0
-                   , syb ==0.7.2.4
-                   , unix ==2.7.2.2
-                   , split ==0.2.5
-                   , text ==1.2.4.0
-                   , bytestring ==0.10.10.1
-                   , regex-compat ==0.95.2.2
-                   , old-time ==1.1.0.4
-                   , time ==1.9.3
-                   , integer-gmp ==1.0.2.0
+                   , process >=1.6.9.0 && <1.7
+                   , syb >=0.7.2.4 && <0.8
+                   , unix >=2.7.2.2 && <2.8
+                   , split >=0.2.5 && <0.3
+                   , text >=1.2.4.0 && <1.3
+                   , bytestring >=0.10.10.1 && <0.12
+                   , regex-compat >=0.95.2.2 && <0.96
+                   , old-time >=1.1.0.4 && <1.2
+                   , time >=1.9.3 && <1.10
+                   , integer-gmp >=1.0.2.0 && <1.2
                    , gitrev >=1.3.1
+                   , htcl
     exposed-modules:  BSC
                    , Util
                    , VCD
@@ -308,32 +309,39 @@ library
                    , InlineWires
                    , LambdaCalc
                    , Libs.Parse
+    extra-libraries: tcl, yices
+    include-dirs:     ${pkgroot}/src/vendor/htcl/include
+                     , ${pkgroot}/src/vendor/yices/include
+    extra-lib-dirs:   ${pkgroot}/src/vendor/htcl/lib
+                     , ${pkgroot}/src/vendor/yices/lib
 
 executable bsc
     import:           common-options
     hs-source-dirs:   src/exec
     main-is:          Main.hs
     build-depends:    bsc
-                   , base ==4.13.0.0
-                   , directory ==1.3.6.0
-                   , filepath ==1.4.2.1
-                   , process ==1.6.9.0
-                   , unix ==2.7.2.2
+                   , base >=4.13.0.0 && <4.18
+                   , directory >=1.3.6.0 && <1.4
+                   , filepath >=1.4.2.1 && <1.5
+                   , process >=1.6.9.0 && <1.7
+                   , unix >=2.7.2.2 && <2.8
                    , gitrev >=1.3.1
-                   , array ==0.5.4.0
-                   , containers ==0.6.2.1
-                   , mtl ==2.2.2
-                   , parsec ==3.1.14.0
-                   , split ==0.2.5
-                   , text ==1.2.4.0
-                   , bytestring ==0.10.10.1
-                   , regex-compat ==0.95.2.2
-                   , old-time ==1.1.0.4
-                   , time ==1.9.3
-                   , integer-gmp ==1.0.2.0
-    extra-libraries: htcl, tcl
-    include-dirs: src/vendor/htcl
-    extra-lib-dirs: src/vendor/htcl
+                   , array >=0.5.4.0 && <0.6
+                   , containers >=0.6.2.1 && <0.7
+                   , mtl >=2.2.2 && <2.3
+                   , parsec >=3.1.14.0 && <3.2
+                   , split >=0.2.5 && <0.3
+                   , text >=1.2.4.0 && <1.3
+                   , bytestring >=0.10.10.1 && <0.12
+                   , regex-compat >=0.95.2.2 && <0.96
+                   , old-time >=1.1.0.4 && <1.2
+                   , time >=1.9.3 && <1.10
+                   , integer-gmp >=1.0.2.0 && <1.2
+    extra-libraries: htcl, tcl, yices
+    include-dirs: ${pkgroot}/src/vendor/htcl
+                 , ${pkgroot}/src/vendor/yices/include
+    extra-lib-dirs: ${pkgroot}/src/vendor/htcl
+                   , ${pkgroot}/src/vendor/yices/lib
 
 executable bluetcl
     import:           common-options
@@ -341,26 +349,28 @@ executable bluetcl
     c-sources: src/vendor/htcl/haskell.c
     main-is:          Main.hs
     build-depends:    bsc
-                   , base ==4.13.0.0
-                   , directory ==1.3.6.0
-                   , filepath ==1.4.2.1
-                   , process ==1.6.9.0
-                   , unix ==2.7.2.2
+                   , base >=4.13.0.0 && <4.18
+                   , directory >=1.3.6.0 && <1.4
+                   , filepath >=1.4.2.1 && <1.5
+                   , process >=1.6.9.0 && <1.7
+                   , unix >=2.7.2.2 && <2.8
                    , gitrev >=1.3.1
-                   , array ==0.5.4.0
-                   , containers ==0.6.2.1
-                   , mtl ==2.2.2
-                   , parsec ==3.1.14.0
-                   , split ==0.2.5
-                   , text ==1.2.4.0
-                   , bytestring ==0.10.10.1
-                   , regex-compat ==0.95.2.2
-                   , old-time ==1.1.0.4
-                   , time ==1.9.3
-                   , integer-gmp ==1.0.2.0
-    extra-libraries: tcl, htcl
-    include-dirs: src/vendor/htcl
-    extra-lib-dirs: src/vendor/htcl
+                   , array >=0.5.4.0 && <0.6
+                   , containers >=0.6.2.1 && <0.7
+                   , mtl >=2.2.2 && <2.3
+                   , parsec >=3.1.14.0 && <3.2
+                   , split >=0.2.5 && <0.3
+                   , text >=1.2.4.0 && <1.3
+                   , bytestring >=0.10.10.1 && <0.12
+                   , regex-compat >=0.95.2.2 && <0.96
+                   , old-time >=1.1.0.4 && <1.2
+                   , time >=1.9.3 && <1.10
+                   , integer-gmp >=1.0.2.0 && <1.2
+    extra-libraries: tcl, htcl, yices
+    include-dirs: ${pkgroot}/src/vendor/htcl
+                 , ${pkgroot}/src/vendor/yices/include
+    extra-lib-dirs: ${pkgroot}/src/vendor/htcl
+                   , ${pkgroot}/src/vendor/yices/lib
     build-tool-depends: hsc2hs:hsc2hs
     other-modules:    BlueTcl
 
@@ -369,28 +379,28 @@ test-suite bsc-test
     type:            exitcode-stdio-1.0
     hs-source-dirs:  testsuite
     main-is:         TestMain.hs
-    build-depends:    base ==4.13.0.0
-                    , array ==0.5.4.0
-                    , containers ==0.6.2.1
-                    , directory ==1.3.6.0
-                    , filepath ==1.4.2.1
-                    , mtl ==2.2.2
-                    , parsec ==3.1.14.0
-                    , process ==1.6.9.0
-                    , syb ==0.7.2.4
-                    , unix ==2.7.2.2
-                    , split ==0.2.5
-                    , text ==1.2.4.0
-                    , bytestring ==0.10.10.1
-                    , regex-compat ==0.95.2.2
-                    , old-time ==1.1.0.4
-                    , time ==1.9.3
-                    , integer-gmp ==1.0.2.0
+    build-depends:    base >=4.13.0.0 && <4.18
+                    , array >=0.5.4.0 && <0.6
+                    , containers >=0.6.2.1 && <0.7
+                    , directory >=1.3.6.0 && <1.4
+                    , filepath >=1.4.2.1 && <1.5
+                    , mtl >=2.2.2 && <2.3
+                    , parsec >=3.1.14.0 && <3.2
+                    , process >=1.6.9.0 && <1.7
+                    , syb >=0.7.2.4 && <0.8
+                    , unix >=2.7.2.2 && <2.8
+                    , split >=0.2.5 && <0.3
+                    , text >=1.2.4.0 && <1.3
+                    , bytestring >=0.10.10.1 && <0.12
+                    , regex-compat >=0.95.2.2 && <0.96
+                    , old-time >=1.1.0.4 && <1.2
+                    , time >=1.9.3 && <1.10
+                    , integer-gmp >=1.0.2.0 && <1.2
                     , bsc
                     , tasty
                     , tasty-hunit
                     , tasty-quickcheck
-                    , optparse-applicative ==0.15.1.0
+                    , optparse-applicative >=0.15.1.0 && <0.16
 
 test-suite dejagnu-tests
     import:           common-options
@@ -399,26 +409,34 @@ test-suite dejagnu-tests
     hs-source-dirs:  testsuite
     other-modules:   DejaGNUDriver
                    , DejaGNUTest
-    build-depends:    base ==4.13.0.0
-                    , array ==0.5.4.0
-                    , containers ==0.6.2.1
-                    , directory ==1.3.6.0
-                    , filepath ==1.4.2.1
-                    , mtl ==2.2.2
-                    , parsec ==3.1.14.0
-                    , process ==1.6.9.0
-                    , syb ==0.7.2.4
-                    , unix ==2.7.2.2
-                    , split ==0.2.5
-                    , text ==1.2.4.0
-                    , bytestring ==0.10.10.1
-                    , regex-compat ==0.95.2.2
-                    , old-time ==1.1.0.4
-                    , time ==1.9.3
-                    , integer-gmp ==1.0.2.0
+    build-depends:    base >=4.13.0.0 && <4.18
+                    , array >=0.5.4.0 && <0.6
+                    , containers >=0.6.2.1 && <0.7
+                    , directory >=1.3.6.0 && <1.4
+                    , filepath >=1.4.2.1 && <1.5
+                    , mtl >=2.2.2 && <2.3
+                    , parsec >=3.1.14.0 && <3.2
+                    , process >=1.6.9.0 && <1.7
+                    , syb >=0.7.2.4 && <0.8
+                    , unix >=2.7.2.2 && <2.8
+                    , split >=0.2.5 && <0.3
+                    , text >=1.2.4.0 && <1.3
+                    , bytestring >=0.10.10.1 && <0.12
+                    , regex-compat >=0.95.2.2 && <0.96
+                    , old-time >=1.1.0.4 && <1.2
+                    , time >=1.9.3 && <1.10
+                    , integer-gmp >=1.0.2.0 && <1.2
                     , bsc
                     , Cabal >=3.0
                     , tasty
                     , tasty-hunit
                     , tasty-quickcheck
-                    , optparse-applicative ==0.15.1.0
+                    , optparse-applicative >=0.15.1.0 && <0.16
+
+if os(darwin)
+    if arch(aarch64)
+        cc-options: -arch arm64
+        ld-options: -arch arm64
+    else
+        cc-options: -arch x86_64
+        ld-options: -arch x86_64

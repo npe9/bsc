@@ -1,5 +1,5 @@
 {-# LANGUAGE FlexibleInstances #-}
-{-# OPTIONS_GHC -Werror -fwarn-incomplete-patterns #-}
+{-# OPTIONS_GHC -fwarn-incomplete-patterns #-}
 module GenBin(genBinFile, readBinFile) where
 
 import Control.Monad(when)

@@ -10,5 +10,10 @@ alwaysApply: true
 - we are trying to move from makefiles to cabal as a build system
 - we are also trying to modernize the bluespec project to use modern haskell
 - do not alter the bs and bsv files, if the compiler can't compile them it's doing something wrong
+- do not ever try to build anything using a makefile, cabal should be the only building tool.
+- the design should be portable, arm64, x86_64, riscv
+- all libraries should be shared
+- we are initially building for arm64
+
 
 

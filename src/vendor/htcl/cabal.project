@@ -1,0 +1,6 @@
+packages: .
+
+package htcl
+    ghc-options: -Wall -dynamic
+    cc-options: -Wall -DTCL85
+    extra-libraries: tcl8.5 
