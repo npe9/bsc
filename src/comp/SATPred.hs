@@ -7,30 +7,20 @@ module SATPred(
 import Flags
 import Pred
 
-import qualified Pred2STP as STP
-         (SState, initSState, solvePred)
-import qualified Pred2Yices as Yices
-         (YState, initYState, solvePred)
+import qualified Pred2SBV as SBV
+         (SBVState, initSBVState, solvePred)
 
 -- -------------------------
 
--- A single data type for any of the solver state
--- For now, we always use STP for this
-data SATPredState =
-           SATPredS_STP STP.SState
-         | SATPredS_Yices Yices.YState
+-- A single data type for the solver state
+newtype SATPredState = SATPredSSBV SBV.SBVState
 
 -- -------------------------
 
 initSATPredState :: Flags -> IO SATPredState
-initSATPredState flags = do
-    case (satBackend flags) of
-      SAT_STP -> do
-        stp_state <- STP.initSState
-        return (SATPredS_STP stp_state)
-      SAT_Yices -> do
-        yices_state <- Yices.initYState
-        return (SATPredS_Yices yices_state)
+initSATPredState _ = do
+    sbv_state <- SBV.initSBVState "" undefined False [] [] []
+    return (SATPredSSBV sbv_state)
 
 -- -------------------------
 
@@ -47,12 +37,9 @@ checkPreds (SATPredS_Yices yices_state) ps = do
 -- -------------------------
 
 solvePred :: SATPredState -> [Pred] -> Pred -> IO (Maybe Pred, SATPredState)
-solvePred (SATPredS_STP stp_state) ps p = do
-    (res, stp_state') <- STP.solvePred stp_state ps p
-    return (res, SATPredS_STP stp_state')
-solvePred (SATPredS_Yices yices_state) ps p = do
-    (res, yices_state') <- Yices.solvePred yices_state ps p
-    return (res, SATPredS_Yices yices_state')
+solvePred (SATPredSSBV sbv_state) ps p = do
+    (res, sbv_state') <- SBV.solvePred sbv_state ps p
+    return (res, SATPredSSBV sbv_state')
 
 -- -------------------------
 

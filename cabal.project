@@ -2,10 +2,13 @@ packages: .
           src/vendor/htcl
 
 package bsc
-    ghc-options: -fPIC
+    ghc-options: -fPIC -Wno-dodgy-imports
 
 package htcl
     ghc-options: -fPIC
+
+package sbv
+    ghc-options: -Wno-dodgy-imports -Wno-unused-imports -Wno-unused-matches -Wno-error=dodgy-imports
 
 optimization: 2
 documentation: True
@@ -15,4 +18,15 @@ test-show-details: direct
 
 package bsc
     tests: True
-    test-show-details: direct 
+    test-show-details: direct
+
+allow-newer: all 
+
+package *
+  documentation: True
+  haddock-html: True
+  haddock-hoogle: True
+  haddock-internal: True
+
+extra-include-dirs: /opt/homebrew/include
+extra-lib-dirs: /opt/homebrew/lib

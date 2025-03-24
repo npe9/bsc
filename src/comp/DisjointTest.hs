@@ -10,7 +10,7 @@ module DisjointTest(
 
 import qualified Data.Set as S
 import qualified Data.Map as M
-import Control.Monad(foldM {- , when -})
+import Control.Monad(foldM)
 
 import Util(ordPair,uniquePairs)
 
@@ -25,22 +25,17 @@ import Pragma
 
 import VModInfo(VModInfo)
 import AExpr2Util(getMethodOutputPort)
---import Debug.Trace(trace)
 
-import qualified AExpr2STP as STP
-         (SState, initSState, addADefToSState,
-          checkDisjointRulePair, checkDisjointExpr)
-import qualified AExpr2Yices as Yices
-         (YState, initYState, addADefToYState,
-          checkDisjointRulePair, checkDisjointExpr)
+import qualified AExpr2SBV as SBV
+         (SBVState, initSBVState, addADefToSBVState,
+          checkDisjointRulePair, checkDisjointRulePair2, checkDisjointRulePair3, checkDisjointExpr)
 
 -- -------------------------
 
 type RuleDisjointTest = ARuleId -> ARuleId -> Bool
 
--- A single data type for either of the disjoint-testing state
-data DisjointTestState = DTS_Yices DSupportMap Yices.YState
-                       | DTS_STP   DSupportMap STP.SState
+-- A single data type for disjoint-testing state
+data DisjointTestState = DTSsbv DSupportMap SBV.SBVState
 
 -- -------------------------
 
@@ -48,52 +43,29 @@ initDisjointTestState ::
     String -> ErrorHandle -> Flags ->
     [ADef] -> [AVInst] -> [(ARuleId, [AExpr], Maybe ARuleId)] ->
     IO DisjointTestState
-initDisjointTestState str errh flags ds avis rs = do
+initDisjointTestState str _ _ ds avis rs = do
     let supportMap = buildSupportMap ds avis rs
-    case (satBackend flags) of
-      SAT_Yices -> do
-          yices_state <- Yices.initYState str flags True ds avis rs
-          return (DTS_Yices supportMap yices_state)
-      SAT_STP -> do
-          stp_state <- STP.initSState str flags True ds avis rs
-          return (DTS_STP supportMap stp_state)
-
+    sbv_state <- SBV.initSBVState str undefined True ds avis rs
+    return (DTSsbv supportMap sbv_state)
 
 addADefToDisjointTestState :: DisjointTestState -> [ADef] ->
                               IO DisjointTestState
-addADefToDisjointTestState (DTS_Yices m yices_state) ds = do
-    yices_state' <- Yices.addADefToYState yices_state ds
-    return (DTS_Yices m yices_state')
-addADefToDisjointTestState (DTS_STP m stp_state) ds = do
-    stp_state' <- STP.addADefToSState stp_state ds
-    return (DTS_STP m stp_state')
+addADefToDisjointTestState (DTSsbv m sbv_state) ds = do
+    sbv_state' <- SBV.addADefToSBVState sbv_state ds
+    return (DTSsbv m sbv_state')
 
 -- -------------------------
 
 checkDisjointExpr :: DisjointTestState -> AExpr -> AExpr ->
                      IO (Maybe Bool, DisjointTestState)
-checkDisjointExpr (DTS_Yices m yices_state) e1 e2 = do
-    (res, yices_state') <- Yices.checkDisjointExpr yices_state e1 e2
-    return (res, DTS_Yices m yices_state')
-checkDisjointExpr (DTS_STP m stp_state) e1 e2 = do
-    (res, stp_state') <- STP.checkDisjointExpr stp_state e1 e2
-    return (res, DTS_STP m stp_state')
+checkDisjointExpr (DTSsbv m sbv_state) e1 e2 = do
+    (res, sbv_state') <- SBV.checkDisjointExpr sbv_state e1 e2
+    return (res, DTSsbv m sbv_state')
 
 -- When testing conditions on methods inside one rule (or two rules),
 -- we also want to consider the predicates of the rules; the conditions
 -- on the methods might not be disjoint, but are disjoint when the rule
 -- condition is True.
---
--- XXX We assume that it's easier to test without the predicates first,
--- XXX then test again if that reports not-disjoint.
---
--- XXX For tests within the same rule, might it be cheaper to assert
--- XXX the predicate once?  Particularly if this function is being
--- XXX called many times for the same rule?
---
--- XXX This function could take the rule Ids as arguments, and look up
--- XXX the predicate from the state.
---
 checkDisjointExprWithCtx ::
     DisjointTestState -> AExpr -> AExpr -> AExpr -> AExpr ->
     IO (Maybe Bool, DisjointTestState)
@@ -111,23 +83,23 @@ checkDisjointExprWithCtx dts ctx1 ctx2 e1 e2 = do
 genDisjointSet :: DisjointTestState -> [ARuleId] -> [ASchedulePragma] ->
                   IO (S.Set (ARuleId, ARuleId), DisjointTestState)
 genDisjointSet dt_state ruleNames pragmas = do
-  let me_state = makeMETest pragmas
+    let me_state = makeMETest pragmas
 
-      addResult :: S.Set (ARuleId, ARuleId) -> (ARuleId, ARuleId) -> Maybe Bool -> S.Set (ARuleId, ARuleId)
-      addResult rset (r1,r2) (Just True) = S.insert (r1,r2) (S.insert (r2,r1) rset)
-      addResult rset _ _                 = rset
+        addResult :: S.Set (ARuleId, ARuleId) -> (ARuleId, ARuleId) -> Maybe Bool -> S.Set (ARuleId, ARuleId)
+        addResult rset (r1,r2) (Just True) = S.insert (r1,r2) (S.insert (r2,r1) rset)
+        addResult rset _ _                 = rset
 
-      foldFn (rset, st) p =
-          case (checkMERulePair me_state p) of
-            res@(Just _) -> let rset' = addResult rset p res
-                            in  return (rset', st)
-            _            -> do (res, st') <- checkDisjointRulePairTop st p
-                               let rset' = addResult rset p res
-                               return (rset', st')
+        foldFn (rset, st) p =
+            case checkMERulePair me_state p of
+                res@(Just _) -> let rset' = addResult rset p res
+                               in  return (rset', st)
+                _            -> do
+                    (res, st') <- checkDisjointRulePairTop st p
+                    let rset' = addResult rset p res
+                    return (rset', st')
 
-  (res, dt_state') <- foldM foldFn (S.empty, dt_state) (uniquePairs ruleNames)
-
-  return (res, dt_state')
+    (res, dt_state') <- foldM foldFn (S.empty, dt_state) (uniquePairs ruleNames)
+    return (res, dt_state')
 
 
 supportIntersects :: DSupportMap -> (ARuleId, ARuleId) -> Bool
@@ -140,26 +112,15 @@ checkDisjointRulePairTop :: DisjointTestState -> (ARuleId, ARuleId) ->
                          IO (Maybe Bool, DisjointTestState)
 checkDisjointRulePairTop s p = do
   let dis = supportIntersects (getSupportMap s) p
-  if (dis) then return (Just False,s)
-    else do checkDisjointRulePair s p
-  -- Self check code.....
-  -- (res, s') <-checkDisjointRulePair s p
-  -- when (dis && (res /= Just False)) $ do
-  --   putStrLn $ "DIS " ++ ppReadable p ++ " --> " ++ ppReadable (res, dis)
-  --   putStrLn $ "XXXXXX " ++ ppReadable (getSupportMap s)
-  --   putStrLn $ "XXXXXX " ++ ppReadable res
-  --   fail "bad disjoint map"
-  -- return (res, s')
+  if dis then return (Just False,s)
+    else checkDisjointRulePair s p
 
 
 checkDisjointRulePair :: DisjointTestState -> (ARuleId, ARuleId) ->
                          IO (Maybe Bool, DisjointTestState)
-checkDisjointRulePair s@(DTS_Yices m yices_state) p = do
-    (res, yices_state') <- Yices.checkDisjointRulePair yices_state p
-    return (res, DTS_Yices m yices_state')
-checkDisjointRulePair s@(DTS_STP m stp_state) p = do
-    (res, stp_state') <- STP.checkDisjointRulePair stp_state p
-    return (res, DTS_STP m stp_state')
+checkDisjointRulePair s@(DTSsbv m sbv_state) p = do
+    (res, sbv_state') <- SBV.checkDisjointRulePair sbv_state p
+    return (res, DTSsbv m sbv_state')
 
 -- -------------------------
 
@@ -174,15 +135,15 @@ checkMERulePair (me_map, me_test) (rule1,rule2) =
           _                        -> Nothing
 
 checkMEPairs :: METest -> [Integer] -> [Integer] -> Maybe Bool
-checkMEPairs me_test [] _  = Nothing
-checkMEPairs me_test _  [] = Nothing
+checkMEPairs _ [] _  = Nothing
+checkMEPairs _ _  [] = Nothing
 checkMEPairs me_test (num1:rest) nums2 =
       let fn [] = Nothing
-          fn (num2:rest) = case (M.lookup (ordPair (num1, num2)) me_test) of
-                             (Just res) -> res
+          fn (num2:rest) = case M.lookup (ordPair (num1, num2)) me_test of
+                             Just res -> res
                              _          -> fn rest
-      in  case (fn nums2) of
-            (Just y) -> (Just y)
+      in  case fn nums2 of
+            Just y -> Just y
             _        -> checkMEPairs me_test rest nums2
 
 
@@ -197,10 +158,9 @@ addMESPM s _ = s
 addMEIds :: ((MEMap, METest), Integer) -> [[ARuleId]] ->
             ((MEMap, METest), Integer)
 addMEIds s idss =
-  let -- XXX this is also in ASchedule
-      mkMEPairs [] = []
+  let mkMEPairs [] = []
       mkMEPairs ([]:rest) = mkMEPairs rest
-      mkMEPairs (ids:rest) = [(ids, r) | r <- rest] ++ (mkMEPairs rest)
+      mkMEPairs (ids:rest) = [(ids, r) | r <- rest] ++ mkMEPairs rest
 
       addMEPair (ids0, ids1) ((me_map, me_test), num) =
           let me_map1 = foldl (addMEId num) me_map ids0
@@ -211,13 +171,12 @@ addMEIds s idss =
       foldr addMEPair s (mkMEPairs idss)
 
 addMEId :: Integer -> MEMap -> ARuleId -> MEMap
-addMEId num me_map id = do
-  case (M.lookup id me_map) of
-      Just nums -> M.insert id (num:nums) me_map
-      Nothing   -> M.insert id [num]      me_map
+addMEId num me_map id = case M.lookup id me_map of
+    Just nums -> M.insert id (num:nums) me_map
+    Nothing   -> M.insert id [num] me_map
 
 -- -------------------------
--- Disjoint testing can be avoided if there is no overlap i the logic cones of each rule,
+-- Disjoint testing can be avoided if there is no overlap in the logic cones of each rule,
 -- that is f(as) == 1 and g(bs) == 1 can be satisfied if set as /= set bs
 -- we build a map containing the support set (as, bs) for each Aid,  rule
 type DSupportMap =  M.Map AId (S.Set ASupport)
@@ -236,14 +195,13 @@ isLeafDef (DClkGate _ _) = True
 isLeafDef (DTask _)      = True
 isLeafDef (DDef _ _)     = False
 
-lookupSupport :: DSupportMap -> AId -> (S.Set ASupport)
+lookupSupport :: DSupportMap -> AId -> S.Set ASupport
 lookupSupport m d = M.findWithDefault err d m
     where err = error $ "DisjointTests findSupport, bad lookup: " ++ show d
                 ++ "\n" ++ show m
 
 buildSupportMap :: [ADef] -> [AVInst] -> [(ARuleId, [AExpr], Maybe ARuleId)] -> DSupportMap
-buildSupportMap adefs avis rs = --trace ("XXX support map:" ++ ppReadable res) $
-                                res
+buildSupportMap adefs avis rs = res
   where
     res = foldl generator M.empty [(id,es) | (id,es,_) <- rs]
     --
@@ -284,8 +242,7 @@ buildSupportMap adefs avis rs = --trace ("XXX support map:" ++ ppReadable res) $
 
 -- -------------------------
 getSupportMap :: DisjointTestState -> DSupportMap
-getSupportMap (DTS_Yices m _) = m
-getSupportMap (DTS_STP m _)   = m
+getSupportMap (DTSsbv m _) = m
 
 
 instance PPrint ASupport where

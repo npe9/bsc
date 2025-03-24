@@ -1,15 +1,13 @@
 package bsc
     ghc-options: -fPIC
-    extra-lib-dirs: src/vendor/yices/v2.6/yices2-inst/lib
-    extra-include-dirs: src/vendor/yices/v2.6/yices2-inst/include
+    extra-lib-dirs: /Users/npe/src/bsc-new/bsc/src/vendor/yices/v2.6/yices2-inst/lib
+    extra-include-dirs: /Users/npe/src/bsc-new/bsc/src/vendor/yices/v2.6/yices2-inst/include
     extra-libraries: yices, gmp
 
 package htcl
     ghc-options: -fPIC
-    extra-lib-dirs: ${pkgroot}/lib
-    extra-include-dirs: ${pkgroot}/include
-
-with-compiler: ghc-9.4.7
+    extra-lib-dirs: /Users/npe/src/bsc-new/bsc/src/vendor/htcl/lib
+    extra-include-dirs: /Users/npe/src/bsc-new/bsc/src/vendor/htcl/include
 
 -- Architecture settings
 package bsc
@@ -29,3 +27,7 @@ package htcl
         else
             cc-options: -arch x86_64
             ld-options: -arch x86_64
+
+package bsc
+    extra-lib-dirs: /opt/homebrew/Cellar/tcl-tk@8/8.6.16/lib
+    extra-include-dirs: /opt/homebrew/Cellar/tcl-tk@8/8.6.16/include

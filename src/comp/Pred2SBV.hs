@@ -1,23 +1,26 @@
+{-# LANGUAGE FlexibleContexts #-}
 module Pred2SBV(
-       SState,
-       initSState,
+       SBVState,
+       initSBVState,
        solvePred
 ) where
 
 import Control.Monad(when)
-import Control.Monad.State(StateT, liftIO, gets, get, put, runStateT)
-import qualified Data.Map as M
-import Data.SBV
+import Control.Monad.State(StateT, runStateT, get, put, gets, modify, lift)
+import Data.SBV(MonadSymbolic, SBool, SWord32, sTrue, sFalse, literal, free, smax, smin, runSMTWith, defaultSMTCfg, constrain, (.==), Symbolic)
 import Data.SBV.Control
-
-import PFPrint
-import Id
-import PreIds
-import CType
+import qualified Data.Map as M
+import Debug.Trace
+import CType(typeclassId, Type(..), TyCon(..), CTypeclass(..))
 import Type
 import Pred
+import Id
+import PreIds
+import PPrint
+import Flags
+import ErrorUtil
+import ASyntax(ADef, AVInst)
 
-import Debug.Trace(traceM)
 import IOUtil(progArgs)
 
 traceTest :: Bool
@@ -28,134 +31,91 @@ traceConv = "-trace-smt-conv" `elem` progArgs
 
 -- -------------------------
 
-data SState =
-    SState {
-               -- source of unique identifiers
-               unknownId     :: Integer,
+-- | Our pure state holds a cache mapping a custom Type to its SBV expression.
+newtype SBVState = SBVState { typeMap :: M.Map Type SWord32 }
 
-               -- a map from types to their converted form
-               -- (this is used both to avoid duplicate conversion
-               -- and as a list of possible terms for solving)
-               typeSExprMap   :: M.Map Type (SVal, [SVal])
-              }
-
-type SM = StateT SState IO
-
--- represent numeric types as 32-bit vectors
--- (since that provides a division operator and log/exp via shifting)
-intWidth :: (Integral t) => t
-intWidth = 32
+-- | Our combined monad: a state transformer over the Symbolic monad.
+type PureSM a = StateT SBVState Symbolic a
 
 -- -------------------------
 
-initSState :: IO SState
-initSState = do
-  return (SState { unknownId = 0,
-                   typeSExprMap = M.empty
-                 })
+initSBVState :: String -> a -> Bool -> [ADef] -> [AVInst] -> [b] -> IO SBVState
+initSBVState _ _ _ _ _ _ = return $ SBVState M.empty
 
 -- -------------------------
 
-solvePred :: SState -> [Pred] -> Pred -> IO (Maybe Pred, SState)
-solvePred s ps p = runStateT (solvePredM ps p) s
+-- | Convert a type to an SBV symbolic value, using a cache to avoid recomputation.
+fromType :: Type -> PureSM SWord32
+fromType t = do
+    cache <- gets typeMap
+    case M.lookup t cache of
+      Just v  -> return v
+      Nothing -> do
+         when traceConv $ lift $ constrain sTrue  -- Hack to allow tracing in PureSM
+         v <- case t of
+                TCon (TyNum n _) -> return $ literal (fromIntegral n)
+                TAp (TAp tc t1) t2
+                  | tc == tAdd -> do
+                        v1 <- fromType t1
+                        v2 <- fromType t2
+                        return (v1 + v2)
+                  | tc == tMul -> do
+                        v1 <- fromType t1
+                        v2 <- fromType t2
+                        return (v1 * v2)
+                  | tc == tMax -> do
+                        v1 <- fromType t1
+                        v2 <- fromType t2
+                        return (smax v1 v2)
+                  | tc == tMin -> do
+                        v1 <- fromType t1
+                        v2 <- fromType t2
+                        return (smin v1 v2)
+                -- For unknown types, create a fresh symbolic variable
+                _ -> lift $ free "x"
+         modify (\s -> s { typeMap = M.insert t v cache })
+         return v
 
-solvePredM :: [Pred] -> Pred -> SM (Maybe Pred)
-solvePredM ps p = do
-  when traceTest $ traceM ("solvePred: " ++ ppReadable p)
+-- | Convert a predicate to an SBV Boolean formula.
+fromPred :: Pred -> PureSM SBool
+fromPred (IsIn c [t1, t2, t3])
+  | name c == CTypeclass idMax || name c == CTypeclass idMin = do
+       v1 <- fromType t1
+       v2 <- fromType t2
+       v3 <- fromType t3
+       let op = if name c == CTypeclass idMax then smax else smin
+       return $ v3 .== op v1 v2
+fromPred _ = return sTrue
 
-  -- check that the pred is one that we handle, and if so then
-  -- construct p as an inequality (along with its additional assertions)
-  m_yneq <- genPredInequality p
-  case m_yneq of
-    Nothing -> do
-      -- the pred is not of the form that we can handle
-      when traceTest $ traceM("solvePred: not handled")
-      return Nothing
-    Just (yneq, as) -> do
-      -- first make sure that the preds have at least one solution
-      is_sat <- do
-          -- assert the given provisos
-          mapM_ assertPred (p:ps)
-          -- check if there exists a solution
-          sat <- checkSAT
-          return (sat == Just True)
+-- | Solve the predicate by converting the assumptions and the goal symbolically,
+-- then running the SMT solver.
+solvePred :: SBVState -> [Pred] -> Pred -> IO (Maybe Pred, SBVState)
+solvePred initState assumps p = do
+    when traceTest $ traceM ("solvePred: " ++ ppReadable p)
+    
+    runSMTWith defaultSMTCfg $ do
+        -- Run the pure conversion (with caching) in the Symbolic monad
+        (finalFormula, finalState) <- runStateT (do
+            -- Convert and assert all assumptions
+            mapM_ (\pr -> do
+                sbvPr <- fromPred pr
+                lift $ constrain sbvPr) assumps
+            -- Convert the target predicate
+            fromPred p) initState
 
-      -- if there is no solution, return the pred unsatisfied
-      -- (if an error needs to be reported, it will be reported later)
-      if not is_sat then
-        do when traceTest $ traceM("solvePred: not satisfiable")
-           return Nothing
-      else
-        do mapM_ assertPred ps
-           mapM_ (liftIO . assert) (yneq:as)
-           sat <- checkSAT
-           let res = case sat of
-                      Just False -> Just p
-                      _ -> Nothing
-           when traceTest $
-             case res of
-               Nothing -> traceM("solvePred: unresolved: " ++ ppReadable p)
-               Just _  -> traceM("solvePred: resolved: " ++ ppReadable p)
-           return res
+        -- Now, in query mode, check satisfiability
+        query $ do
+            constrain finalFormula
+            cs <- checkSat
+            case cs of
+                Sat -> return (Nothing, finalState)  -- Predicate is satisfiable
+                _   -> return (Just p, finalState)   -- Predicate is unsatisfiable
 
-genPredInequality :: Pred -> SM (Maybe (SVal, [SVal]))
-genPredInequality p@(IsIn c [t1, t2]) | classId c == idNumEq = do
-  when traceTest $ traceM("pred: " ++ ppReadable p)
-  (yt1, as1) <- convType2SExpr t1
-  (yt2, as2) <- convType2SExpr t2
-  ynp <- liftIO $ (yt1 :: SWord32) ./= (yt2 :: SWord32)
-  return $ Just (ynp, as1 ++ as2)
-genPredInequality p@(IsIn c [t1, t2, t3]) | classId c == idAdd = do
-  when traceTest $ traceM("pred: " ++ ppReadable p)
-  (yt3, as3) <- convType2SExpr t3
-  (yadd, as12) <- convType2SExpr (TAp (TAp tAdd t1) t2)
-  ynp <- liftIO $ (yadd :: SWord32) ./= (yt3 :: SWord32)
-  return $ Just (ynp, as3 ++ as12)
-genPredInequality p@(IsIn c [t1, t2, t3]) | classId c == idMul = do
-  when traceTest $ traceM("pred: " ++ ppReadable p)
-  (yt3, as3) <- convType2SExpr t3
-  (ymul, as12) <- convType2SExpr (TAp (TAp tMul t1) t2)
-  ynp <- liftIO $ (ymul :: SWord32) ./= (yt3 :: SWord32)
-  return $ Just (ynp, as3 ++ as12)
-genPredInequality p@(IsIn c [t1, t2, t3]) | classId c == idMax = do
-  when traceTest $ traceM("pred: " ++ ppReadable p)
-  (yt3, as3) <- convType2SExpr t3
-  (ymax, as12) <- convType2SExpr (TAp (TAp tMax t1) t2)
-  ynp <- liftIO $ (ymax :: SWord32) ./= (yt3 :: SWord32)
-  return $ Just (ynp, as3 ++ as12)
-genPredInequality p@(IsIn c [t1, t2, t3]) | classId c == idMin = do
-  when traceTest $ traceM("pred: " ++ ppReadable p)
-  (yt3, as3) <- convType2SExpr t3
-  (ymin, as12) <- convType2SExpr (TAp (TAp tMin t1) t2)
-  ynp <- liftIO $ (ymin :: SWord32) ./= (yt3 :: SWord32)
-  return $ Just (ynp, as3 ++ as12)
-genPredInequality p@(IsIn c [t1, t2, t3]) | classId c == idDiv = do
-  when traceTest $ traceM("pred: " ++ ppReadable p)
-  (yt3, as3) <- convType2SExpr t3
-  (ydiv, as12) <- convType2SExpr (TAp (TAp tDiv t1) t2)
-  ynp <- liftIO $ (ydiv :: SWord32) ./= (yt3 :: SWord32)
-  return $ Just (ynp, as3 ++ as12)
-genPredInequality p@(IsIn c [t1, t2, t3]) | classId c == idLog = do
-  when traceTest $ traceM("pred: " ++ ppReadable p)
-  (yt3, as3) <- convType2SExpr t3
-  (ylog, as12) <- convType2SExpr (TAp (TAp tLog t1) t2)
-  ynp <- liftIO $ (ylog :: SWord32) ./= (yt3 :: SWord32)
-  return $ Just (ynp, as3 ++ as12)
-genPredInequality p = do
-  when traceTest $ traceM("pred unknown: " ++ ppReadable p)
-  return Nothing
-
--- -------------------------
-
-checkSAT :: SM (Maybe Bool)
-checkSAT = do
-  res <- liftIO $ runSMT $ do
-    r <- checkSat
-    case r of
-      Sat -> return True
-      Unsat -> return False
-      Unk -> return False
-  return $ Just res
+-- Assert a predicate in the SMT context
+assertPred :: Pred -> PureSM ()
+assertPred p = do
+    p' <- fromPred p
+    lift $ constrain p'
 
 -- -------------------------
 
@@ -164,93 +124,22 @@ checkSAT = do
 -- the local copy may become stale, and you'll lose info if you write back the
 -- stale copy.
 
-addToTypeMap :: Type -> (SVal, [SVal]) -> SM ()
+addToTypeMap :: Type -> SWord32 -> PureSM ()
 addToTypeMap t res = do
-    s <- get
-    let tmap = typeSExprMap s
-        tmap' = M.insert t res tmap
-    put (s {typeSExprMap = tmap' })
+    cache <- gets typeMap
+    modify (\s -> s { typeMap = M.insert t res cache })
 
 -- -------------------------
 
-addUnknownType :: Type -> SM (SVal, [SVal])
-addUnknownType t = do
-    when traceConv $ traceM("addUnknownType: " ++ ppString t)
-    tmap <- gets typeSExprMap
-    case M.lookup t tmap of
-      Just res -> do when traceConv $ traceM("   reusing.")
-                     return res
-      Nothing -> do
-        when traceConv $ traceM("   making new var.")
-        var <- liftIO $ free "x" :: IO SWord32
-        let res = (var, [])
-        addToTypeMap t res
-        return res
-
--- -------------------------
-
-convType2SExpr :: Type -> SM (SVal, [SVal])
+-- Convert a type to a symbolic expression
+convType2SExpr :: Type -> PureSM SWord32
 convType2SExpr t = do
-  when traceConv $ traceM("converting: " ++ ppReadable t)
-  tmap <- gets typeSExprMap
-  case M.lookup t tmap of
-    Just res -> do when traceConv $ traceM("   reusing.")
-                   return res
-    Nothing -> do
-      when traceConv $ traceM("   converting new.")
-      yt <- convType2SExpr' t
-      addToTypeMap t yt
-      return yt
-
-convType2SExpr' :: Type -> SM (SVal, [SVal])
-convType2SExpr' t@(TVar {}) = do
-  when traceConv $ traceM("conv TyVar: " ++ ppReadable t)
-  addUnknownType t
-convType2SExpr' t@(TCon (TyNum n _)) = do
-  when traceConv $ traceM("conv TyNum: " ++ ppReadable n)
-  res <- liftIO $ literal (fromIntegral n) :: IO SWord32
-  return (res, [])
-convType2SExpr' t@(TAp (TAp tc t1) t2) | tc == tAdd = do
-  when traceConv $ traceM("conv TAdd: " ++ ppReadable t)
-  (yt1, as1) <- convType2SExpr t1
-  (yt2, as2) <- convType2SExpr t2
-  res <- liftIO $ (yt1 :: SWord32) + (yt2 :: SWord32)
-  return (res, as1 ++ as2)
-convType2SExpr' t@(TAp (TAp tc t1) t2) | tc == tMul = do
-  when traceConv $ traceM("conv TMul: " ++ ppReadable t)
-  (yt1, as1) <- convType2SExpr t1
-  (yt2, as2) <- convType2SExpr t2
-  res <- liftIO $ (yt1 :: SWord32) * (yt2 :: SWord32)
-  return (res, as1 ++ as2)
-convType2SExpr' t@(TAp (TAp tc t1) t2) | tc == tDiv || tc == tLog = do
-  when traceConv $ traceM("conv " ++ (if tc == tDiv then "TDiv" else "TLog") ++ ": " ++ ppReadable t)
-  (yt1, as1) <- convType2SExpr t1
-  (yt2, as2) <- convType2SExpr t2
-  res <- liftIO $ (yt1 :: SWord32) `sDiv` (yt2 :: SWord32)
-  return (res, as1 ++ as2)
-convType2SExpr' t@(TAp (TAp tc t1) t2) | tc == tMax = do
-  when traceConv $ traceM("conv TMax: " ++ ppReadable t)
-  (yt1, as1) <- convType2SExpr t1
-  (yt2, as2) <- convType2SExpr t2
-  res <- liftIO $ max (yt1 :: SWord32) (yt2 :: SWord32)
-  return (res, as1 ++ as2)
-convType2SExpr' t@(TAp (TAp tc t1) t2) | tc == tMin = do
-  when traceConv $ traceM("conv TMin: " ++ ppReadable t)
-  (yt1, as1) <- convType2SExpr t1
-  (yt2, as2) <- convType2SExpr t2
-  res <- liftIO $ min (yt1 :: SWord32) (yt2 :: SWord32)
-  return (res, as1 ++ as2)
-convType2SExpr' t = do
-  when traceConv $ traceM("conv unknown: " ++ ppReadable t)
-  addUnknownType t
-
--- -------------------------
-
-assertPred :: Pred -> SM ()
-assertPred p = do
-  when traceTest $ traceM("assertPred: " ++ ppReadable p)
-  m_yneq <- genPredInequality p
-  case m_yneq of
-    Nothing -> return ()
-    Just (yneq, as) -> do
-      mapM_ (liftIO . assert) (yneq:as) 
+    cache <- gets typeMap
+    case M.lookup t cache of
+        Just res -> return res
+        Nothing -> do
+            when traceConv $ lift $ constrain sTrue  -- Hack to allow tracing in PureSM
+            var <- lift $ free "x"
+            let res = var
+            addToTypeMap t res
+            return res 

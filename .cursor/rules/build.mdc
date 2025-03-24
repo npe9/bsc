@@ -14,6 +14,8 @@ alwaysApply: true
 - the design should be portable, arm64, x86_64, riscv
 - all libraries should be shared
 - we are initially building for arm64
+- don't use Yices/Z3/STP directly use them through SBV
+
 
 
 

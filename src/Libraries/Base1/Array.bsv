@@ -1,5 +1,36 @@
 package Array;
 
+export map;
+export foldr;
+export scanr;
+export foldr1;
+export foldl;
+export fold;
+export foldl1;
+export scanl;
+export packArray;
+export unpackArray;
+export takeAt;
+export genWith;
+export arrayToList;
+export listToArray;
+export append;
+export concat;
+export shrinkRight;
+export shrinkLeft;
+export growRight;
+export growLeft;
+export zip;
+export zip3;
+export zip4;
+export unzip;
+export zipWith;
+export zipWith3;
+export reverse;
+export elem;
+export any;
+export all;
+
 // TODO XXX primArrayNewU could be replaced with bracket syntax
 // TODO XXX this file needs more comments
 // TODO XXX remove all reference to right and left, and change to 0th and Nth

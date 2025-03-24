@@ -204,10 +204,9 @@ isTestCommand line = any (`isInfixOf` line) ["test_c_veri_bsv", "test_c_only_bsv
 -- Get the bin directory where bsc is located
 getBinDir :: IO FilePath
 getBinDir = do
-  -- We'll use the cabal dist-newstyle directory for the bin path
   pwd <- getCurrentDirectory
-  return $ pwd </> "dist-newstyle" </> "build" </> "x86_64-osx" </> "ghc-8.8.4" </> 
-           "bsc-2024.3" </> "x" </> "bsc" </> "opt" </> "build" </> "bsc"
+  return $ pwd </> "dist-newstyle" </> "build" </> "aarch64-osx" </> "ghc-9.10.1" </> 
+           "bsc-2024.3.0" </> "x" </> "bsc" </> "opt" </> "build" </> "bsc"
 
 -- Match BSV files with their command types
 matchFilesToCommands :: [FilePath] -> [(String, String, Maybe String)] -> [(FilePath, (String, Maybe String))]
