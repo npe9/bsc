@@ -62,9 +62,9 @@ pp e = pp' (0::Integer) e
         paren False s = s
 
 instance (PPrint a) => PPrint (BoolExp a) where
-    pPrint d p (e1 `And` e2) = pparen (p>3) (pPrint d 3 e1 <+> text "&" <+> pPrint d 3 e2)
-    pPrint d p (e1 `Or` e2) = pparen (p>2) (pPrint d 2 e1 <+> text "|" <+> pPrint d 2 e2)
-    pPrint d p (If e1 e2 e3) = pparen (p>1) (pPrint d 1 e1 <+> text "?" <+> pPrint d 1 e2 <+> text ":" <+> pPrint d 1 e3)
+    pPrint d p (e1 `And` e2) = pparen (p>3) $ pPrint d 3 e1 <+> text "&" <+> pPrint d 3 e2
+    pPrint d p (e1 `Or` e2) = pparen (p>2) $ pPrint d 2 e1 <+> text "|" <+> pPrint d 2 e2
+    pPrint d p (If e1 e2 e3) = pparen (p>1) $ pPrint d 1 e1 <+> text "?" <+> pPrint d 1 e2 <+> text ":" <+> pPrint d 1 e3
     pPrint d _ (Not e) = text "~" <> pPrint d 10 e
     pPrint d p (Var v) = pPrint d p v
     pPrint d _ TT = text "T"
@@ -79,41 +79,41 @@ reduce (And TT e) = Just e
 reduce (And FF e) = Just FF
 reduce (And e TT) = Just e
 reduce (And e FF) = Just FF
-reduce (And (If c1 t1 e1) (If c2 t2 e2)) | c1==c2 = Just (If c1 (rAnd t1 t2) (rAnd e1 e2))
+reduce (And (If c1 t1 e1) (If c2 t2 e2)) | c1==c2 = Just $ If c1 (rAnd t1 t2) (rAnd e1 e2)
 reduce (And e1 e2) | e1 == e2 = Just e1
 reduce (And e1 e2) | e1 == bNot e2 = Just FF
 reduce e@(And _ _) = me'
-  where me' = fmap (rrAnds . reverse) (redAnd False S.empty [] es)
+  where me' = rrAnds . reverse <$> redAnd False S.empty [] es
         es = collAnd e
 
 reduce (Or TT e) = Just TT
 reduce (Or FF e) = Just e
 reduce (Or e TT) = Just TT
 reduce (Or e FF) = Just e
-reduce (Or (If c1 t1 e1) (If c2 t2 e2)) | c1==c2 = Just (If c1 (rOr t1 t2) (rOr e1 e2))
-reduce (Or (And x1 y1) (And x2 y2)) | x1 == x2 = Just (And x1 (rOr y1 y2))
-reduce (Or (And x1 y1) (And x2 y2)) | y1 == y2 = Just (And (rOr x1 x2) y2)
+reduce (Or (If c1 t1 e1) (If c2 t2 e2)) | c1==c2 = Just $ If c1 (rOr t1 t2) (rOr e1 e2)
+reduce (Or (And x1 y1) (And x2 y2)) | x1 == x2 = Just $ And x1 (rOr y1 y2)
+reduce (Or (And x1 y1) (And x2 y2)) | y1 == y2 = Just $ And (rOr x1 x2) y2
 {-
 reduce (Or e1 (Or e1' e2)) | e1 == e1' = Just (Or e1 e2)
 -}
 reduce (Or e1 e2) | e1 == e2 = Just e1
 reduce (Or e1 e2) | e1 == bNot e2 = Just TT
 reduce e@(Or _ _) = me'
-  where me' = fmap (rrOrs . reverse) (redOr False S.empty [] es)
+  where me' = rrOrs . reverse <$> redOr False S.empty [] es
         es = collOr e
 
-reduce (Not (And e1 e2)) = Just (Or  (rNot e1) (rNot e2))
-reduce (Not (Or  e1 e2)) = Just (And (rNot e1) (rNot e2))
+reduce (Not (And e1 e2)) = Just $ Or (rNot e1) (rNot e2)
+reduce (Not (Or  e1 e2)) = Just $ And (rNot e1) (rNot e2)
 reduce (Not (Not e)) = Just e
-reduce (Not (If c t e)) = Just (If c (rNot t) (rNot e))
+reduce (Not (If c t e)) = Just $ If c (rNot t) (rNot e)
 reduce (Not TT) = Just FF
 reduce (Not FF) = Just TT
 reduce (If TT t e) = Just t
 reduce (If FF t e) = Just e
-reduce (If c TT e) = Just (Or c e)
-reduce (If c FF e) = Just (And (Not c) e)
-reduce (If c t TT) = Just (Or (Not c) t)
-reduce (If c t FF) = Just (And c t)
+reduce (If c TT e) = Just $ Or c e
+reduce (If c FF e) = Just $ And (Not c) e
+reduce (If c t TT) = Just $ Or (Not c) t
+reduce (If c t FF) = Just $ And c t
 reduce (If c  t e) | t == e = Just t
 reduce _ = Nothing
 
@@ -180,24 +180,16 @@ rrNot e = Not e
 sSimplify :: (Ord a) => BoolExp a -> BoolExp a
 sSimplify (And e1 e2) =
         let e' = And (sSimplify e1) (sSimplify e2) in
-        case reduce e' of
-        Just e -> sSimplify e
-        Nothing -> e'
+        maybe e' sSimplify (reduce e')
 sSimplify (Or e1 e2) =
         let e' = Or (sSimplify e1) (sSimplify e2) in
-        case reduce e' of
-        Just e -> sSimplify e
-        Nothing -> e'
+        maybe e' sSimplify (reduce e')
 sSimplify (If e1 e2 e3) =
         let e' = If (sSimplify e1) (sSimplify e2) (sSimplify e3) in
-        case reduce e' of
-        Just e -> sSimplify e
-        Nothing -> e'
+        maybe e' sSimplify (reduce e')
 sSimplify (Not e) =
         let e' = Not (sSimplify e) in
-        case reduce e' of
-        Just e -> sSimplify e
-        Nothing -> e'
+        maybe e' sSimplify (reduce e')
 sSimplify e@(Var _) = e
 sSimplify TT = TT
 sSimplify FF = FF
@@ -229,10 +221,7 @@ aSimplify :: (Ord a) => BoolExp a -> BoolExp a
 aSimplify = sSimplify . simp bddTrue . sSimplify
 
 red :: (Ord a) => BoolExp a -> BoolExp a
-red e =
-    case reduce e of
-    Just e' -> red e'
-    Nothing -> e
+red e = maybe e red (reduce e)
 
 implies :: (Ord a) => BDD a -> BDD a -> BDD a -> Bool
 implies bdd e1 e2 = bddIsTrue (bddImplies (bddAnd bdd e1) e2)

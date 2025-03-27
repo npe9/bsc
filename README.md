@@ -147,3 +147,31 @@ available under the BSD-3-Clause license.
 The source code also includes several other components under
 various license agreements (all of it open/copyleft software).
 See [`COPYING`](COPYING) for copyright and license details.
+
+## Build
+
+The Bluespec compiler is built using Cabal, the standard Haskell build system. For detailed build instructions, see [INSTALL.md](INSTALL.md).
+
+Quick start:
+
+```bash
+# Install GHC and Cabal using ghcup
+curl --proto '=https' --tlsv1.2 -sSf https://get-ghcup.haskell.org | sh
+ghcup install ghc 9.4.8
+ghcup set ghc 9.4.8
+ghcup install cabal 3.10.1.0
+
+# Clone the repository
+git clone --recursive https://github.com/B-Lang-org/bsc
+cd bsc
+
+# Build and install
+cabal update
+cabal build all
+cabal install all
+
+# Add Cabal bin to PATH
+export PATH=$HOME/.cabal/bin:$PATH
+```
+
+For more detailed instructions, including how to build documentation and run tests, see [INSTALL.md](INSTALL.md).

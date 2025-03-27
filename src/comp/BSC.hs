@@ -32,6 +32,7 @@ import ListMap(lookupWithDefault)
 import SCC(scc)
 
 -- utility libs
+import Error(ErrorHandle, exitOK)
 import ParseOp
 import PFPrint
 import Util(headOrErr, fromJustOrErr, joinByFst, quote)
@@ -187,16 +188,20 @@ hmain args = do
     let args' = words bscopts ++ args
     -- reconstruct original command line (modulo whitespace)
     -- add a newline at the end so it is offset
-    let cmdLine = concat ("Invoking command line:\n" : (intersperse " " (pprog:args'))) ++ "\n"
+    let cmdLine = concat ("Invoking command line:\n" : intersperse " " (pprog:args')) ++ "\n"
+    errh <- initErrorHandle
     let showPreamble flags = do
+          when (showVersion flags) $ do
+            putStrLnF (bscVersionStr True)
+            putStrLnF copyright
+            exitOK errh
           when (verbose flags) $ putStrLnF (bscVersionStr True)
           when (verbose flags) $ putStrLnF copyright
-          when ((verbose flags) || (printFlags flags)) $ putStrLnF cmdLine
-          when ((printFlags flags) || (printFlagsHidden flags)) $
+          when (verbose flags || printFlags flags) $ putStrLnF cmdLine
+          when (printFlags flags || printFlagsHidden flags) $
                 putStrLnF (showFlags flags)
           when (printFlagsRaw flags) $ putStrLnF (showFlagsRaw flags)
     let (warnings, decoded) = decodeArgs (baseName pprog) args' cdir
-    errh <- initErrorHandle
     let doWarnings = when ((not . null) warnings) $ bsWarning errh warnings
         setFlags = setErrorHandleFlags errh
     case decoded of

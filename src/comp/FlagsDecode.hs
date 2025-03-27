@@ -1651,8 +1651,8 @@ externalFlags = [
           "output directory for .v files", Visible)),
 
         ("verbose",
-         (NoArg (Left . moreTalkative) (Just verbose),
-          "be more talkative", Visible)),
+         (Toggle (\f x -> f {verbosity=if x then Verbose else Normal}) (showIfTrue verbose),
+          "show more information", Visible)),
         ("v",
          (Alias "verbose", "same as -verbose", Visible)),
 
@@ -1733,7 +1733,16 @@ externalFlags = [
 
         ("Xv",
          (PassThrough "arg" (\f s -> Left (f {vFlags = vFlags f ++ [s]})) (Just (FRTListString vFlags)),
-          "pass argument to the Verilog link process", Visible))
+          "pass argument to the Verilog link process", Visible)),
+
+        ("v",
+         (NoArg (Left . moreTalkative) (Just verbose),
+          "be more talkative",
+          Visible)),
+
+        ("version",
+         (NoArg (\f -> Left $ f {showVersion=True}) (Just showVersion),
+          "show version information", Visible))
         ]
 
 -- -------------------------

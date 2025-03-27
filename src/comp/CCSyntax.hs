@@ -367,39 +367,39 @@ instance PPrint CCExpr where
         loperand = pparen (forceParens o e1) $ pPrint d (lprec o) e1
         op       = pPrint d 0 o
         roperand = pparen (forceParens o e2) $ pPrint d (rprec o) e2
-    in pparen (p >= prec o) (hsep [loperand, op, roperand])
-  pPrint d p (CGroup e)           = pparen True (pPrint d 0 e)
+    in pparen (p >= prec o) $ hsep [loperand, op, roperand]
+  pPrint d p (CGroup e)           = pparen True $ pPrint d 0 e
   pPrint d p (CFunCall fn args)   =
     let fn_name = pPrint d callPrec fn
         arg_list = commaSep (map pp args)
-    in fn_name <> (pparen True (arg_list))
+    in fn_name <> pparen True arg_list
   pPrint d p (CArrow struct field) =
     let base = pPrint d arrowPrec struct
-    in pparen (p >= arrowPrec) (base <> (text "->") <> (text field))
+    in pparen (p >= arrowPrec) $ base <> text "->" <> text field
   pPrint d p (CDot struct field)  =
     let base = pPrint d dotPrec struct
     in -- do not parenthesize if equal precedence (left-associative anyway)
-       pparen (p > dotPrec) (base <> (text ".") <> (text field))
+       pparen (p > dotPrec) $ base <> text "." <> text field
   pPrint d p (CIndex arr idx)     =
     let array = pPrint d indexPrec arr
         index = pp idx
-    in pparen (p >= indexPrec) (array <> (text "[") <> index <> (text "]"))
+    in pparen (p >= indexPrec) $ array <> text "[" <> index <> text "]"
   pPrint d p (CCast ty e)         =
     let typ  = printType ty 999 empty
-        expr = pparen True (pPrint d 0 e)
-    in pparen (p >= castPrec) ((text "(") <> typ <> (text ")") <> expr)
+        expr = pparen True $ pPrint d 0 e
+    in pparen (p >= castPrec) $ text "(" <> typ <> text ")" <> expr
   pPrint d p (CDereference e)     =
-    pparen (p >= derefPrec) ((text "*") <> (pPrint d derefPrec e))
+    pparen (p >= derefPrec) $ text "*" <> pPrint d derefPrec e
   pPrint d p (CAddressOf e)     =
-    pparen (p >= addrPrec) ((text "&") <> (pPrint d addrPrec e))
+    pparen (p >= addrPrec) $ text "&" <> pPrint d addrPrec e
   pPrint d p (CTernary c te fe) =
     let cdoc = pPrint d ternaryPrec c
         tdoc = pPrint d ternaryPrec te
         fdoc = pPrint d ternaryPrec fe
-    in pparen (p >= ternaryPrec)
-              (cdoc <+> (text "?") <+> tdoc <+> (text ":") <+> fdoc)
+    in pparen (p >= ternaryPrec) $
+       cdoc <+> text "?" <+> tdoc <+> text ":" <+> fdoc
   pPrint d p (CNew ty Nothing Nothing) =
-    (text "new") <+> (printType ty 999 empty)
+    text "new" <+> printType ty 999 empty
   pPrint d p (CNew ty Nothing (Just e)) =
     let arr_sz = (text "[") <> (pPrint d 0 e) <> (text "]")
     in (text "new") <+> (printType ty 999 empty) <> arr_sz

@@ -5,12 +5,13 @@ import System.Exit
 import System.FilePath
 import System.Directory
 import System.Environment (getEnvironment, setEnv)
-import Data.List (isInfixOf)
+import Data.List (isInfixOf, isPrefixOf)
 import Control.Monad (when, filterM)
-import Control.Exception (bracket)
+import Control.Exception (bracket, catch)
 import Control.Concurrent.MVar (newMVar, takeMVar, putMVar, readMVar, MVar)
 import Data.Function
 import System.IO.Unsafe (unsafePerformIO)
+import System.Environment (getEnv)
 
 -- Global flag to track if we should stop on failure
 {-# NOINLINE stopOnFailureVar #-}
@@ -45,9 +46,12 @@ runDejaGNUDriver testFile = do
       libDir = testsuiteDir </> "lib"
       tclDir = testsuiteDir </> "tcl"
   
-  -- Find the BSC executable
+  -- Find the BSC executable in dist-newstyle
   binDir <- getBinDir
   let bscPath = binDir </> "bsc"
+  
+  -- Get cabal's pkgroot
+  pkgroot <- getEnv "PKGROOT" `catch` const (return $ takeDirectory binDir)
   
   -- Read and parse the .exp file
   contents <- readFile testFile
@@ -60,7 +64,7 @@ runDejaGNUDriver testFile = do
   currentEnv <- getEnvironment
   let libPath = maybe "" id (lookup "LD_LIBRARY_PATH" currentEnv)
       tclPath = maybe "" id (lookup "TCLLIBPATH" currentEnv)
-      updatedLibPath = libDir ++ ":" ++ libPath
+      updatedLibPath = pkgroot </> "lib" ++ ":" ++ libPath
       updatedTclPath = tclDir ++ ":" ++ tclPath
   
   -- Run the test with proper environment
@@ -68,7 +72,8 @@ runDejaGNUDriver testFile = do
     (do
       setEnv "LD_LIBRARY_PATH" updatedLibPath
       setEnv "TCLLIBPATH" updatedTclPath
-      setEnv "BSC_LIB_PATH" testsuiteDir
+      setEnv "BSC_LIB_PATH" pkgroot </> "lib"
+      setEnv "PKGROOT" pkgroot
       return ()
     )
     (\_ -> do
@@ -155,11 +160,21 @@ extractCommandInfo cmd =
 runBscOnFile :: FilePath -> FilePath -> FilePath -> FilePath -> (String, Maybe String) -> IO Bool
 runBscOnFile bscPath testsuiteDir resultDir bsvFile (cmdType, maybeErrCode) = do
   putStrLn $ "Compiling " ++ bsvFile
+  let libDir = testsuiteDir </> "lib"
+      baseLibDir = testsuiteDir </> "src" </> "Libraries" </> "Base1"
+      verilogLibDir = testsuiteDir </> "src" </> "Libraries" </> "Verilog"
+      flags = [ "-p", baseLibDir
+             , "-p", libDir
+             , "-vsearch", baseLibDir
+             , "-vsearch", verilogLibDir
+             , "-bdir", resultDir
+             , "-info-dir", resultDir
+             , "-simdir", resultDir
+             , bsvFile
+             ]
+  
   -- Run bsc with better options
-  (exitCode, stdout, stderr) <- readProcessWithExitCode 
-    bscPath 
-    ["-p", testsuiteDir, "-bdir", resultDir, bsvFile] 
-    ""
+  (exitCode, stdout, stderr) <- readProcessWithExitCode bscPath flags ""
   
   -- Process results based on command type
   case exitCode of
@@ -205,8 +220,52 @@ isTestCommand line = any (`isInfixOf` line) ["test_c_veri_bsv", "test_c_only_bsv
 getBinDir :: IO FilePath
 getBinDir = do
   pwd <- getCurrentDirectory
-  return $ pwd </> "dist-newstyle" </> "build" </> "aarch64-osx" </> "ghc-9.10.1" </> 
-           "bsc-2024.3.0" </> "x" </> "bsc" </> "opt" </> "build" </> "bsc"
+  let distDir = pwd </> "dist-newstyle"
+  distExists <- doesDirectoryExist distDir
+  when (not distExists) $
+    error $ "dist-newstyle directory not found in " ++ pwd
+
+  let buildDir = distDir </> "build"
+  buildExists <- doesDirectoryExist buildDir
+  when (not buildExists) $
+    error $ "build directory not found in " ++ distDir
+
+  let archDir = buildDir </> "aarch64-osx"
+  archExists <- doesDirectoryExist archDir
+  when (not archExists) $
+    error $ "architecture directory not found in " ++ buildDir
+
+  let ghcDir = archDir </> "ghc-9.10.1"
+  ghcExists <- doesDirectoryExist ghcDir
+  when (not ghcExists) $
+    error $ "GHC version directory not found in " ++ archDir
+
+  let bscDir = ghcDir </> "bsc-2024.3.0"
+  bscExists <- doesDirectoryExist bscDir
+  when (not bscExists) $
+    error $ "bsc version directory not found in " ++ ghcDir
+
+  let optDir = bscDir </> "opt"
+  optExists <- doesDirectoryExist optDir
+  when (not optExists) $
+    error $ "opt directory not found in " ++ bscDir
+
+  let buildDir2 = optDir </> "build"
+  buildExists2 <- doesDirectoryExist buildDir2
+  when (not buildExists2) $
+    error $ "build directory not found in " ++ optDir
+
+  let bscExeDir = buildDir2 </> "bsc"
+  bscExeDirExists <- doesDirectoryExist bscExeDir
+  when (not bscExeDirExists) $
+    error $ "bsc executable directory not found in " ++ buildDir2
+
+  let bscExe = bscExeDir </> "bsc"
+  bscExeExists <- doesFileExist bscExe
+  when (not bscExeExists) $
+    error $ "bsc executable not found at " ++ bscExe
+
+  return bscExeDir
 
 -- Match BSV files with their command types
 matchFilesToCommands :: [FilePath] -> [(String, String, Maybe String)] -> [(FilePath, (String, Maybe String))]

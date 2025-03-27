@@ -1,4 +1,3 @@
-
 #  Top 10 useful procs
 # also look for sibling proc such as:
 #  test_c_veri_bsv  test_c_only_bsv,  _bug _fail suffixes, etc.
@@ -460,7 +459,7 @@ proc get_default_bsdir {} {
     if [info exists env(BLUESPECDIR)] then {
         set default_bsdir $env(BLUESPECDIR)
     } else {
-        set default_bsdir "/usr/local/lib/Bluespec"
+        set default_bsdir "${pkgroot}/lib/Bluespec"
     }
 
     return $default_bsdir

@@ -46,7 +46,7 @@ dfltMACRODEF = "-D"
 
 -- Default Bluespec directory (non-IO version for compatibility)
 dfltBluespecDir :: String
-dfltBluespecDir = "/usr/local/lib/" ++ bluespec
+dfltBluespecDir = "${pkgroot}/lib/" ++ bluespec
 
 -- Function to find the actual Bluespec directory at runtime
 findBluespecDir :: IO String

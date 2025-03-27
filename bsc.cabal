@@ -10,25 +10,36 @@ license-file:      LICENSE.txt
 author:            Bluespec Inc.
 maintainer:        B-Lang Maintainers
 category:          Hardware
-build-type:        Simple
+build-type:        Custom
 extra-doc-files:   README.md
                    INSTALL.md
                    DEVELOP.md
 tested-with:       GHC == 9.8.1
-extra-source-files: ${pkgroot}/testsuite/config/*.tcl
-                   , ${pkgroot}/testsuite/lib/*.exp
-                   , ${pkgroot}/testsuite/bsc.evaluator/**/*.exp
-                   , ${pkgroot}/testsuite/bsc.typechecker/**/*.exp
-                   , ${pkgroot}/testsuite/bsc.lib/**/*.exp
-                   , ${pkgroot}/testsuite/bsc.if/**/*.exp
-                   , ${pkgroot}/testsuite/bsc.names/**/*.exp
-                   , ${pkgroot}/testsuite/bsc.bluetcl/**/*.exp
-                   , ${pkgroot}/testsuite/bsc.interra/**/*.exp
-                   , ${pkgroot}/testsuite/bsc.bluesim/**/*.exp
-                   , ${pkgroot}/testsuite/bsc.bugs/bluespec_inc/**/*.exp
-                   , ${pkgroot}/testsuite/bsc.bugs/github/**/*.exp
-                   , ${pkgroot}/testsuite/bsc.bugs/pre_bluespec_inc/**/*.exp
-                   , ${pkgroot}/testsuite/site.exp
+extra-source-files: testsuite/config/*.tcl
+                   testsuite/lib/*.exp
+                   testsuite/bsc.evaluator/**/*.exp
+                   testsuite/bsc.typechecker/**/*.exp
+                   testsuite/bsc.lib/**/*.exp
+                   testsuite/bsc.if/**/*.exp
+                   testsuite/bsc.names/**/*.exp
+                   testsuite/bsc.bluetcl/**/*.exp
+                   testsuite/bsc.interra/**/*.exp
+                   testsuite/bsc.bluesim/**/*.exp
+                   testsuite/bsc.bugs/bluespec_inc/**/*.exp
+                   testsuite/bsc.bugs/github/**/*.exp
+                   testsuite/bsc.bugs/pre_bluespec_inc/**/*.exp
+                   testsuite/site.exp
+                   src/Libraries/Base1/*.bs
+                   src/Libraries/Base1/*.bsv
+                   src/Libraries/Base2/*.bs
+                   src/Libraries/Base2/*.bsv
+                   src/Libraries/Base3-Contexts/*.bs
+                   src/Libraries/Base3-Contexts/*.bsv
+                   src/Libraries/Base3-Math/*.bs
+                   src/Libraries/Base3-Math/*.bsv
+                   src/Libraries/Base3-Misc/*.bs
+                   src/Libraries/Base3-Misc/*.bsv
+                   src/bluetcl/*.tcl
 
 common common-options
     default-language: Haskell2010
@@ -47,18 +58,30 @@ common common-options
         ghc-options:    -fhide-source-paths
     if impl(ghc >= 8.4)
         ghc-options:    -Wmissing-export-lists
-                        -Wpartial-fields
+                        -Wno-partial-fields
     if impl(ghc >= 8.10)
         ghc-options:    -Wunused-packages
+
+custom-setup
+    setup-depends: base >= 4.20.0.0 && <4.21
+                , Cabal >= 3.0.0.0
+                , directory >= 1.3.6.0
+                , filepath >= 1.4.2.1
+                , process >= 1.6.9.0
+                , unix >= 2.7.2.2 && <2.8
 
 library
     import:           common-options
     hs-source-dirs:   src/comp
-                      src/Libraries
+                      src/Libraries/Base1
+                      src/Libraries/Base2
+                      src/Libraries/Base3-Math
+                      src/Libraries/Base3-Misc
+                      src/Libraries/Base3-Contexts
                       src/comp/Libs
-                      src/vendor/htcl
                       src/comp/GHC/posix
                       src/comp/Parser/BSV
+                      src/vendor/htcl
     build-depends:    base >=4.20.0.0 && <4.21
                    , array >=0.5.4.0 && <0.6
                    , containers >=0.6.2.1 && <0.7
@@ -75,12 +98,34 @@ library
                    , regex-compat >=0.95.2.2 && <0.96
                    , old-time >=1.1.0.4 && <1.2
                    , time >=1.9.3 && <1.10
-                   , integer-gmp >=1.0.2.0 && <1.2
                    , gitrev >=1.3.1
-                   , htcl
-                   , simple-smt >=0.9.7
                    , sbv ==11.3
                    , syb >=0.7.2.4 && <0.8
+                   , htcl
+    include-dirs: src/vendor/htcl
+    extra-lib-dirs: src/vendor/htcl
+    extra-libraries: HSrts-1.0.2
+                   , ffi
+                   , tcl8.6
+                   , tcl9.0
+                   , tclstub
+                   , HShtcl-0.1.0.0-inplace
+    data-dir: src/Libraries
+    data-files: Base1/*.bs
+                Base1/*.bsv
+                Base2/*.bs
+                Base2/*.bsv
+                Base3-Contexts/*.bs
+                Base3-Contexts/*.bsv
+                Base3-Math/*.bs
+                Base3-Math/*.bsv
+                Base3-Misc/*.bs
+                Base3-Misc/*.bsv
+    extra-tmp-files: build/bsvlib/*.bo
+                    build/bsvlib/*.bi
+                    build/bsvlib/*.ba
+                    build/tcllib/bluespec/tclIndex
+                    build/tcllib/bluespec/pkgIndex.tcl
     exposed-modules:  BSC
                    , Util
                    , VCD
@@ -197,8 +242,8 @@ library
                    , ContextErrors
                    , CtxRed
                    , Error
-                   , ErrorMonad
                    , ErrorUtil
+                   , ErrorMonad
                    , Eval
                    , FStringCompat
                    , FileIOUtil
@@ -305,9 +350,6 @@ library
                    , InlineWires
                    , LambdaCalc
                    , Libs.Parse
-    extra-libraries: tcl
-    include-dirs:     ${pkgroot}/src/vendor/htcl/include
-    extra-lib-dirs:   ${pkgroot}/src/vendor/htcl/lib
 
 executable bsc
     import:           common-options
@@ -331,7 +373,12 @@ executable bsc
                    , old-time >=1.1.0.4 && <1.2
                    , time >=1.9.3 && <1.10
                    , integer-gmp >=1.0.2.0 && <1.2
-    extra-libraries: htcl, tcl
+    extra-libraries: HSrts-1.0.2
+                    , ffi
+                    , tcl8.6
+                    , tcl9.0
+                    , tclstub
+                    , HShtcl-0.1.0.0-inplace
     include-dirs: ${pkgroot}/src/vendor/htcl
     extra-lib-dirs: ${pkgroot}/src/vendor/htcl
 
@@ -360,45 +407,102 @@ executable bluetcl
                    , integer-gmp >=1.0.2.0 && <1.2
                    , syb >=0.7.2.4 && <0.8
                    , sbv ==11.3
-    extra-libraries: tcl, htcl
+                   , generic-data >=1.0.0
+    extra-libraries: HSrts-1.0.2
+                    , ffi
+                    , tcl8.6
+                    , tcl9.0
+                    , tclstub
+                    , HShtcl-0.1.0.0-inplace
     include-dirs: ${pkgroot}/src/vendor/htcl
     extra-lib-dirs: ${pkgroot}/src/vendor/htcl
     build-tool-depends: hsc2hs:hsc2hs
     other-modules:    BlueTcl
 
-test-suite bsc-test
-    import:           common-options
-    type:            exitcode-stdio-1.0
-    hs-source-dirs:  testsuite
-    main-is:         TestMain.hs
-    build-depends:    base >=4.20.0.0 && <4.21
-                    , array >=0.5.4.0 && <0.6
-                    , containers >=0.6.2.1 && <0.7
-                    , directory >=1.3.6.0 && <1.4
-                    , filepath >=1.4.2.1 && <1.5
-                    , mtl >=2.2.2 && <2.3
-                    , parsec >=3.1.14.0 && <3.2
-                    , process >=1.6.9.0 && <1.7
-                    , syb >=0.7.2.4 && <0.8
-                    , unix >=2.7.2.2 && <2.8
-                    , split >=0.2.5 && <0.3
-                    , text >=1.2.4.0 && <1.3
-                    , bytestring >=0.10.10.1 && <0.12
-                    , regex-compat >=0.95.2.2 && <0.96
-                    , old-time >=1.1.0.4 && <1.2
-                    , time >=1.9.3 && <1.10
-                    , integer-gmp >=1.0.2.0 && <1.2
-                    , bsc
-                    , tasty
-                    , tasty-hunit
-                    , tasty-quickcheck
-                    , optparse-applicative >=0.15.1.0 && <0.16
+test-suite bsc-tests
+    type:                exitcode-stdio-1.0
+    main-is:            TestMain.hs
+    hs-source-dirs:     testsuite
+    build-depends:      base >=4.20.0.0 && <4.21
+                     , directory >=1.3.6.0 && <1.4
+                     , filepath >=1.4.2.1 && <1.5
+                     , process >=1.6.9.0 && <1.7
+                     , bsc
+                     , tasty
+                     , tasty-hunit
+                     , optparse-applicative >=0.15.1.0 && <0.16
+    extra-source-files: testsuite/config/*.tcl
+                     , testsuite/lib/*.exp
+                     , testsuite/bsc.evaluator/**/*.exp
+                     , testsuite/bsc.typechecker/**/*.exp
+                     , testsuite/bsc.lib/**/*.exp
+                     , testsuite/bsc.if/**/*.exp
+                     , testsuite/bsc.names/**/*.exp
+                     , testsuite/bsc.bluetcl/**/*.exp
+                     , testsuite/bsc.interra/**/*.exp
+                     , testsuite/bsc.bluesim/**/*.exp
+                     , testsuite/bsc.bugs/bluespec_inc/**/*.exp
+                     , testsuite/bsc.bugs/github/**/*.exp
+                     , testsuite/bsc.bugs/pre_bluespec_inc/**/*.exp
+                     , testsuite/site.exp
+    data-files:         testsuite/config/*.tcl
+                     , testsuite/lib/*.exp
+                     , testsuite/bsc.evaluator/**/*.exp
+                     , testsuite/bsc.typechecker/**/*.exp
+                     , testsuite/bsc.lib/**/*.exp
+                     , testsuite/bsc.if/**/*.exp
+                     , testsuite/bsc.names/**/*.exp
+                     , testsuite/bsc.bluetcl/**/*.exp
+                     , testsuite/bsc.interra/**/*.exp
+                     , testsuite/bsc.bluesim/**/*.exp
+                     , testsuite/bsc.bugs/bluespec_inc/**/*.exp
+                     , testsuite/bsc.bugs/github/**/*.exp
+                     , testsuite/bsc.bugs/pre_bluespec_inc/**/*.exp
+                     , testsuite/site.exp
+    default-language:   Haskell2010
+    ghc-options:        -Wall
+                      -Wcompat
+                      -Widentities
+                      -Wno-incomplete-uni-patterns
+                      -Wno-incomplete-record-updates
+                      -fno-warn-orphans
+                      -fno-warn-name-shadowing
+                      -fno-warn-unused-matches
+                      -Wno-dodgy-imports
 
-test-suite dejagnu-tests
+if os(darwin)
+    if arch(aarch64)
+        cc-options: -arch arm64
+        ld-options: -arch arm64
+    else
+        cc-options: -arch x86_64
+        ld-options: -arch x86_64
+
+data-files:     src/Libraries/Base1/*.bs
+                src/Libraries/Base1/*.bsv
+                src/Libraries/Base2/*.bs
+                src/Libraries/Base2/*.bsv
+                src/Libraries/Base3-Contexts/*.bs
+                src/Libraries/Base3-Contexts/*.bsv
+                src/Libraries/Base3-Math/*.bs
+                src/Libraries/Base3-Math/*.bsv
+                src/Libraries/Base3-Misc/*.bs
+                src/Libraries/Base3-Misc/*.bsv
+                src/bluetcl/*.tcl
+
+extra-tmp-files: build/bsvlib/*.bo
+                build/bsvlib/*.bi
+                build/bsvlib/*.ba
+                build/tcllib/bluespec/tclIndex
+                build/tcllib/bluespec/pkgIndex.tcl
+
+build-type:     Custom
+
+test-suite unit-tests
     import:           common-options
     type:            exitcode-stdio-1.0
-    main-is:         TestMain.hs
     hs-source-dirs:  testsuite
+    main-is:         TestMain.hs
     other-modules:   DejaGNUDriver
                    , DejaGNUTest
     build-depends:    base >=4.20.0.0 && <4.21
@@ -419,16 +523,25 @@ test-suite dejagnu-tests
                     , time >=1.9.3 && <1.10
                     , integer-gmp >=1.0.2.0 && <1.2
                     , bsc
-                    , Cabal >=3.0
                     , tasty
                     , tasty-hunit
                     , tasty-quickcheck
                     , optparse-applicative >=0.15.1.0 && <0.16
-
-if os(darwin)
-    if arch(aarch64)
-        cc-options: -arch arm64
-        ld-options: -arch arm64
-    else
-        cc-options: -arch x86_64
-        ld-options: -arch x86_64
+    include-dirs: /opt/homebrew/Cellar/tcl-tk@8/8.6.16/include
+                 , /opt/homebrew/Cellar/tcl-tk/9.0.1/include/tcl-tk
+                 , /Users/npe/.ghcup/ghc/9.10.1/lib/ghc-9.10.1/lib/aarch64-osx-ghc-9.10.1/rts-1.0.2/include
+                 , /opt/homebrew/include
+                 , /Users/npe/src/bsc-new/bsc/src/vendor/htcl/include
+    extra-lib-dirs: /opt/homebrew/Cellar/tcl-tk@8/8.6.16/lib
+                   , /opt/homebrew/Cellar/tcl-tk/9.0.1/lib
+                   , /Users/npe/.ghcup/ghc/9.10.1/lib/ghc-9.10.1/lib/aarch64-osx-ghc-9.10.1/rts-1.0.2
+                   , /opt/homebrew/opt/libffi/lib
+                   , /Users/npe/src/bsc-new/bsc/dist-newstyle/build/aarch64-osx/ghc-9.10.1/htcl-0.1.0.0/opt/build
+    extra-libraries: HSrts-1.0.2
+                    , ffi
+                    , tcl8.6
+                    , tcl9.0
+                    , tclstub
+                    , HShtcl-0.1.0.0-inplace
+    ghc-options: -threaded -rtsopts -with-rtsopts=-N
+    build-tool-depends: hsc2hs:hsc2hs

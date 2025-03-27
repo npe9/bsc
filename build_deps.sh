@@ -1,10 +1,10 @@
 #!/bin/bash
 
-# Set up environment for x86_64 architecture
-export ARCHFLAGS="-arch x86_64"
-export CFLAGS="-arch x86_64"
-export CXXFLAGS="-arch x86_64"
-export LDFLAGS="-arch x86_64"
+# Set up environment for arm64 architecture
+export ARCHFLAGS="-arch arm64"
+export CFLAGS="-arch arm64"
+export CXXFLAGS="-arch arm64"
+export LDFLAGS="-arch arm64"
 
 # Create a temporary directory for building dependencies
 mkdir -p deps
@@ -16,9 +16,9 @@ curl -O https://gmplib.org/download/gmp/gmp-6.3.0.tar.xz
 tar xf gmp-6.3.0.tar.xz
 cd gmp-6.3.0
 ./configure --prefix=$(pwd)/../gmp-inst \
-            --host=x86_64-apple-darwin \
-            --build=x86_64-apple-darwin \
-            --target=x86_64-apple-darwin \
+            --host=aarch64-apple-darwin \
+            --build=aarch64-apple-darwin \
+            --target=aarch64-apple-darwin \
             --enable-static \
             --enable-shared \
             CFLAGS="$CFLAGS" \
@@ -34,9 +34,9 @@ mkdir -p build
 cd build
 
 ../configure --enable-mcsat \
-            --host=x86_64-apple-darwin \
-            --build=x86_64-apple-darwin \
-            --target=x86_64-apple-darwin \
+            --host=aarch64-apple-darwin \
+            --build=aarch64-apple-darwin \
+            --target=aarch64-apple-darwin \
             --prefix=$(pwd)/../yices2-inst \
             LDFLAGS="$LDFLAGS -L$(pwd)/../../../deps/gmp-inst/lib" \
             CPPFLAGS="-I$(pwd)/../../../deps/gmp-inst/include" \

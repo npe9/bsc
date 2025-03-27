@@ -14,6 +14,7 @@
 > import Parser.BSV.CVParserAssertion
 > import Parser.BSV.CVParserUtil
 
+
 > -- Main BSV parsing function
 > bsvParseString :: ErrorHandle -> Flags -> Bool -> String -> String -> String -> IO (CPackage, TimeInfo)
 > bsvParseString errh flags show_warns filename basename inp = do
@@ -73,3 +74,10 @@
 >     []         -- no fixity declarations
 >     []         -- no definitions
 >     []         -- no includes 
+
+data InterfaceDecl = InterfaceDecl {
+    ifcName :: Id,
+    ifcPragmas :: [MethodPragma],
+    ifcParams :: [CType],
+    ifcMethods :: [CMethod]
+} 

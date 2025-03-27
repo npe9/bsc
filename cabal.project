@@ -3,9 +3,17 @@ packages: .
 
 package bsc
     ghc-options: -fPIC -Wno-dodgy-imports
+    shared: True
+    extra-lib-dirs: ${pkgroot}/src/vendor/htcl
+    extra-include-dirs: ${pkgroot}/src/vendor/htcl
+    tests: True
+    test-show-details: streaming
 
 package htcl
     ghc-options: -fPIC
+    shared: True
+    extra-lib-dirs: ${pkgroot}/src/vendor/htcl
+    extra-include-dirs: ${pkgroot}/src/vendor/htcl
 
 package sbv
     ghc-options: -Wno-dodgy-imports -Wno-unused-imports -Wno-unused-matches -Wno-error=dodgy-imports
@@ -13,12 +21,9 @@ package sbv
 optimization: 2
 documentation: True
 tests: True
-
-test-show-details: direct
-
-package bsc
-    tests: True
-    test-show-details: direct
+test-show-details: streaming
+jobs: $ncpus
+keep-going: True
 
 allow-newer: all 
 
@@ -27,6 +32,7 @@ package *
   haddock-html: True
   haddock-hoogle: True
   haddock-internal: True
+  shared: True
 
-extra-include-dirs: /opt/homebrew/include
-extra-lib-dirs: /opt/homebrew/lib
+extra-include-dirs: ${pkgroot}/src/vendor/htcl
+extra-lib-dirs: ${pkgroot}/src/vendor/htcl
