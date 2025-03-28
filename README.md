@@ -5,10 +5,12 @@
 [![Version]](https://github.com/B-Lang-org/bsc/releases/tag/2024.07)
 [![License]](./COPYING)
 [![Build Status]](https://github.com/b-lang-org/bsc/actions?query=workflow%3ACI+event%3Apush)
+[![Code Coverage]](https://codecov.io/gh/B-Lang-org/bsc/branch/main/graph/badge.svg)
 
 [License]:        https://img.shields.io/badge/license-BSD%203-blueviolet.svg
 [Version]:        https://img.shields.io/badge/release-2024.07-red.svg?logo=v
 [Build Status]:   https://github.com/b-lang-org/bsc/workflows/CI/badge.svg?branch=main&event=push
+[Code Coverage]:  https://codecov.io/gh/B-Lang-org/bsc/branch/main/graph/badge.svg
 
 **[Community] &bull; [Download] &bull; [Documentation] &bull; [Build] &bull; [Test] &bull; [Develop]**
 

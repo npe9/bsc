@@ -6,6 +6,11 @@ import Distribution.PackageDescription
 import Distribution.Simple.Utils as Utils
 import Distribution.Verbosity
 import Distribution.Text
+import Distribution.System
+import Distribution.Simple.PackageIndex
+import Distribution.Simple.InstallDirs
+import Distribution.Simple.BuildPaths
+import Distribution.Simple.Program.Types
 
 import System.Directory
 import System.FilePath
@@ -17,28 +22,41 @@ import qualified System.Process as Process
 import System.Environment
 import Data.Maybe (fromMaybe)
 import System.Posix.Files (createSymbolicLink)
+import Data.List (isSuffixOf)
+
+-- Helper function to run BSC with proper path handling
+runBSC :: String -> FilePath -> String -> String -> IO ()
+runBSC bscPath buildDir flags file = do
+  let args = ["-bdir", buildDir </> "bsvlib", flags, file]
+  (_, _, _, ph) <- createProcess (proc bscPath args)
+    { std_out = Inherit
+    , std_err = Inherit
+    }
+  _ <- waitForProcess ph
+  return ()
 
 main :: IO ()
 main = defaultMainWithHooks simpleUserHooks
     { preConf = \args flags -> do
-        -- Create build directories
-        createDirectoryIfMissing True "build/bsvlib"
-        createDirectoryIfMissing True "build/tcllib/bluespec"
+        -- Create build directories using proper path handling
+        createDirectoryIfMissing True $ "build" </> "bsvlib"
+        createDirectoryIfMissing True $ "build" </> "tcllib" </> "bluespec"
         preConf simpleUserHooks args flags
     , buildHook = \pkg lbi hooks flags -> do
         -- First create build directories
-        createDirectoryIfMissing True (buildDir lbi </> "bsvlib")
+        createDirectoryIfMissing True $ buildDir lbi </> "bsvlib"
         
         -- Get the system bsc command
         bscPath <- fromMaybe "bsc" <$> lookupEnv "BSC"
         
-        -- Build libraries in dependency order
-        runBSC bscPath (buildDir lbi) "-no-use-prelude" "src/Libraries/Base1/Prelude.bs"
-        runBSC bscPath (buildDir lbi) "-no-use-prelude" "src/Libraries/Base1/PreludeBSV.bsv"
-        runBSC bscPath (buildDir lbi) "-p src/Libraries/Base1" "src/Libraries/Base1/FIFOF_.bsv"
-        runBSC bscPath (buildDir lbi) "-p src/Libraries/Base1" "src/Libraries/Base1/FIFOF.bs"
-        runBSC bscPath (buildDir lbi) "-p src/Libraries/Base1" "src/Libraries/Base1/FIFO.bs"
-        runBSC bscPath (buildDir lbi) "-p src/Libraries/Base1" "src/Libraries/Base1/GetPut.bs"
+        -- Build libraries in dependency order using proper path handling
+        let base1Dir = "src" </> "Libraries" </> "Base1"
+        runBSC bscPath (buildDir lbi) "-no-use-prelude" $ base1Dir </> "Prelude.bs"
+        runBSC bscPath (buildDir lbi) "-no-use-prelude" $ base1Dir </> "PreludeBSV.bsv"
+        runBSC bscPath (buildDir lbi) ("-p " ++ base1Dir) $ base1Dir </> "FIFOF_.bsv"
+        runBSC bscPath (buildDir lbi) ("-p " ++ base1Dir) $ base1Dir </> "FIFOF.bs"
+        runBSC bscPath (buildDir lbi) ("-p " ++ base1Dir) $ base1Dir </> "FIFO.bs"
+        runBSC bscPath (buildDir lbi) ("-p " ++ base1Dir) $ base1Dir </> "GetPut.bs"
         
         -- Continue with normal build
         buildHook simpleUserHooks pkg lbi hooks flags
@@ -49,49 +67,41 @@ main = defaultMainWithHooks simpleUserHooks
         
         -- Then copy our build products to the installation directory
         let verbosity = fromFlag (copyVerbosity flags)
-            installLibDir = libdir $ absoluteInstallDirs pkg lbi NoCopyDest
-            installBinDir = bindir $ absoluteInstallDirs pkg lbi NoCopyDest
-            installExecDir = installLibDir </> "exec"
-            
-        -- Copy Bluespec libraries
-        createDirectoryIfMissing True (installLibDir </> "Libraries")
-        Utils.copyDirectoryRecursive verbosity "build/bsvlib" (installLibDir </> "Libraries")
+            buildDir' = buildDir lbi
+            installDir = datadir (localInstallDir lbi)
+            bsvLibDir = buildDir' </> "bsvlib"
+            tclLibDir = buildDir' </> "tcllib"
+            installBsvLibDir = installDir </> "lib" </> "bsvlib"
+            installTclLibDir = installDir </> "lib" </> "tcllib"
         
-        -- Copy Tcl files
-        createDirectoryIfMissing True (installLibDir </> "tcllib/bluespec")
-        Utils.copyDirectoryRecursive verbosity "build/tcllib/bluespec" (installLibDir </> "tcllib/bluespec")
-
-        -- Copy simulation scripts
-        createDirectoryIfMissing True installExecDir
-        Utils.copyDirectoryRecursive verbosity "src/exec" installExecDir
-
-        -- Create symlinks for simulation scripts
-        let simScripts = [ "bsc_build_vsim_vcs"
-                        , "bsc_build_vsim_vcsi"
-                        , "bsc_build_vsim_ncverilog"
-                        , "bsc_build_vsim_modelsim"
-                        , "bsc_build_vsim_iverilog"
-                        , "bsc_build_vsim_veriwell"
-                        , "bsc_build_vsim_cver"
-                        , "bsc_build_vsim_cvc"
-                        , "bsc_build_vsim_isim"
-                        , "bsc_build_vsim_xsim"
-                        , "bsc_build_vsim_verilator"
-                        ]
-        forM_ simScripts $ \script -> do
-            let src = installExecDir </> script
-            let dst = installBinDir </> script
-            whenM (doesFileExist src) $ do
-                createSymbolicLink src dst
+        -- Create installation directories
+        createDirectoryIfMissing True installBsvLibDir
+        createDirectoryIfMissing True installTclLibDir
+        
+        -- Copy build products
+        copyDirectoryRecursive verbosity bsvLibDir installBsvLibDir
+        copyDirectoryRecursive verbosity tclLibDir installTclLibDir
+        
+        -- Create symbolic links for library files
+        let base1Dir = "src" </> "Libraries" </> "Base1"
+            base2Dir = "src" </> "Libraries" </> "Base2"
+            base3ContextsDir = "src" </> "Libraries" </> "Base3-Contexts"
+            base3MathDir = "src" </> "Libraries" </> "Base3-Math"
+            base3MiscDir = "src" </> "Libraries" </> "Base3-Misc"
+        
+        -- Create symbolic links for each library file
+        forM_ [base1Dir, base2Dir, base3ContextsDir, base3MathDir, base3MiscDir] $ \dir -> do
+          files <- listDirectory dir
+          forM_ files $ \file -> do
+            when (".bs" `isSuffixOf` file || ".bsv" `isSuffixOf` file) $ do
+              let srcPath = dir </> file
+              let dstPath = installBsvLibDir </> file
+              createSymbolicLink srcPath dstPath
     }
 
--- Helper function to run a program with arguments
-runBuildCommand :: Verbosity -> FilePath -> [String] -> IO ()
-runBuildCommand verbosity prog args = do
-    notice verbosity $ "Running: " ++ prog ++ " " ++ unwords args
-    exitCode <- Process.rawSystem prog args
-    when (exitCode /= ExitSuccess) $
-        die' verbosity $ "Failed to run " ++ prog
+-- Helper function for whenM
+whenM :: Monad m => m Bool -> m () -> m ()
+whenM p m = p >>= flip when m
 
 -- Helper function to recursively copy a directory
 copyDirectoryRecursive' :: Verbosity -> FilePath -> FilePath -> IO ()
@@ -109,19 +119,3 @@ copyDirectoryRecursive' verbosity src dst = do
 
 readPackageDesc' :: IO (Maybe GenericPackageDescription)
 readPackageDesc' = undefined  -- TODO: Implement this if needed 
-
-runBSC :: String -> FilePath -> String -> String -> IO ()
-runBSC bscPath buildDir flags file = do
-  let args = ["-bdir", buildDir </> "bsvlib", flags, file]
-  (_, _, _, ph) <- createProcess (proc bscPath args)
-    { std_out = Inherit
-    , std_err = Inherit
-    }
-  _ <- waitForProcess ph
-  return () 
-
--- Helper function for whenM
-whenM :: Monad m => m Bool -> m () -> m ()
-whenM cond action = do
-    result <- cond
-    when result action 
