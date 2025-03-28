@@ -1,155 +1,155 @@
 name: Bluespec
+
 on:
-push:
-branches:[main]
-pull_request:
-branches:[main]
+  push:
+    branches: [ main ]
+  pull_request:
+    branches: [ main ]
 
 jobs:
-bluespec-build:
-needs:build
-runs-on:ubuntu-latest
-steps:
--uses:actions/checkout@v4
+  bluespec-build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
 
--name:SetupGHC
-uses:haskell/actions/setup@v2
-with:
-ghc-version:'9.8.1'
-cabal-version:'3.10.1.0'
+      - name: Set up GHC
+        uses: haskell/actions/setup@v2
+        with:
+          ghc-version: '9.8.1'
+          cabal-version: '3.10.1.0'
 
--name:Cachedependencies
-uses:actions/cache@v4
-with:
-path:|
-~/.cabal/packages
-~/.cabal/store
-dist-newstyle
-key:${{runner.os}}-ghc-9.8.1-${{hashFiles('**/*.cabal','cabal.project')}}
-restore-keys:|
-${{runner.os}}-ghc-9.8.1-
+      - name: Cache dependencies
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cabal/packages
+            ~/.cabal/store
+            dist-newstyle
+          key: ${{ runner.os }}-ghc-9.8.1-${{ hashFiles('**/*.cabal', 'cabal.project') }}
+          restore-keys: |
+            ${{ runner.os }}-ghc-9.8.1-
 
--name:BuildBSCcompiler
-run:|
-cabalupdate
-cabalbuild
+      - name: Build BSC compiler
+        run: |
+          cabal update
+          cabal build
 
--name:SetupBluespec
-run:|
-#InstallBluespeccompileranddependencies
-sudoapt-getupdate
-sudoapt-getinstall-ybuild-essentialgit
+      - name: Set up Bluespec
+        run: |
+          # Install Bluespec compiler and dependencies
+          sudo apt-get update
+          sudo apt-get install -y build-essential git
 
--name:CacheBluespecartifacts
-uses:actions/cache@v4
-with:
-path:|
-build/bsvlib
-build/tcllib
-build/sim
-build/verilog
-build/info
-key:${{runner.os}}-bluespec-${{hashFiles('**/*.bs','**/*.bsv')}}
-restore-keys:|
-${{runner.os}}-bluespec-
+      - name: Cache Bluespec artifacts
+        uses: actions/cache@v4
+        with:
+          path: |
+            build/bsvlib
+            build/tcllib
+            build/sim
+            build/verilog
+            build/info
+          key: ${{ runner.os }}-bluespec-${{ hashFiles('**/*.bs', '**/*.bsv') }}
+          restore-keys: |
+            ${{ runner.os }}-bluespec-
 
--name:BuildBluespeclibraries
-run:|
-mkdir-pbuild/{bsvlib,tcllib,sim,verilog,info}
-dist-newstyle/build/*/*/*/bsc-*/b/build/bsc/bsc-bdirbuild/bsvlib-vdirbuild/verilog-simdirbuild/sim-info-dirbuild/info$(find.-name"*.bs"-o-name"*.bsv")
+      - name: Build Bluespec libraries
+        run: |
+          mkdir -p build/{bsvlib,tcllib,sim,verilog,info}
+          dist-newstyle/build/*/*/*/bsc-*/b/build/bsc/bsc -bdir build/bsvlib -vdir build/verilog -simdir build/sim -info-dir build/info $(find . -name "*.bs" -o -name "*.bsv")
 
--name:RunBluespectests
-run:|
-mkdir-pbuild/test
-dist-newstyle/build/*/*/*/bsc-*/b/build/bsc/bsc-sim-simdirbuild/sim-bdirbuild/bsvlib-vdirbuild/verilog-info-dirbuild/info-obuild/test/test$(find.-name"*_test.bs"-o-name"*_test.bsv")
-./build/test/test
+      - name: Run Bluespec tests
+        run: |
+          mkdir -p build/test
+          dist-newstyle/build/*/*/*/bsc-*/b/build/bsc/bsc -sim -simdir build/sim -bdir build/bsvlib -vdir build/verilog -info-dir build/info -o build/test/test $(find . -name "*_test.bs" -o -name "*_test.bsv")
+          ./build/test/test
 
--name:GenerateBluespecdocumentation
-run:|
-mkdir-pbuild/doc/bluespec
-dist-newstyle/build/*/*/*/bsc-*/b/build/bsc/bsc-doc-bdirbuild/bsvlib-vdirbuild/verilog-simdirbuild/sim-info-dirbuild/info$(find.-name"*.bs"-o-name"*.bsv")
+      - name: Generate Bluespec documentation
+        run: |
+          mkdir -p build/doc/bluespec
+          dist-newstyle/build/*/*/*/bsc-*/b/build/bsc/bsc -doc -bdir build/bsvlib -vdir build/verilog -simdir build/sim -info-dir build/info $(find . -name "*.bs" -o -name "*.bsv")
 
--name:RunBluespecbenchmarks
-run:|
-mkdir-pbuild/bench
-dist-newstyle/build/*/*/*/bsc-*/b/build/bsc/bsc-sim-simdirbuild/sim-bdirbuild/bsvlib-vdirbuild/verilog-info-dirbuild/info-obuild/bench/bench$(find.-name"*_bench.bs"-o-name"*_bench.bsv")
-./build/bench/bench
+      - name: Run Bluespec benchmarks
+        run: |
+          mkdir -p build/bench
+          dist-newstyle/build/*/*/*/bsc-*/b/build/bsc/bsc -sim -simdir build/sim -bdir build/bsvlib -vdir build/verilog -info-dir build/info -o build/bench/bench $(find . -name "*_bench.bs" -o -name "*_bench.bsv")
+          ./build/bench/bench
 
--name:UploadBluespecartifacts
-uses:actions/upload-artifact@v4
-with:
-name:bluespec-artifacts
-path:|
-build/bsvlib/
-build/tcllib/
-build/sim/
-build/verilog/
-build/info/
-build/doc/bluespec/
-build/bench/*.vcd
-build/bench/*.log
-build/test/*.log
+      - name: Upload Bluespec artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: bluespec-artifacts
+          path: |
+            build/bsvlib/
+            build/tcllib/
+            build/sim/
+            build/verilog/
+            build/info/
+            build/doc/bluespec/
+            build/bench/*.vcd
+            build/bench/*.log
+            build/test/*.log
 
-bluespec-synthesis:
-needs:build
-runs-on:ubuntu-latest
-steps:
--uses:actions/checkout@v4
+  bluespec-synthesis:
+    needs: bluespec-build
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
 
--name:SetupGHC
-uses:haskell/actions/setup@v2
-with:
-ghc-version:'9.8.1'
-cabal-version:'3.10.1.0'
+      - name: Set up GHC
+        uses: haskell/actions/setup@v2
+        with:
+          ghc-version: '9.8.1'
+          cabal-version: '3.10.1.0'
 
--name:Cachedependencies
-uses:actions/cache@v4
-with:
-path:|
-~/.cabal/packages
-~/.cabal/store
-dist-newstyle
-key:${{runner.os}}-ghc-9.8.1-${{hashFiles('**/*.cabal','cabal.project')}}
-restore-keys:|
-${{runner.os}}-ghc-9.8.1-
+      - name: Cache dependencies
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cabal/packages
+            ~/.cabal/store
+            dist-newstyle
+          key: ${{ runner.os }}-ghc-9.8.1-${{ hashFiles('**/*.cabal', 'cabal.project') }}
+          restore-keys: |
+            ${{ runner.os }}-ghc-9.8.1-
 
--name:BuildBSCcompiler
-run:|
-cabalupdate
-cabalbuild
+      - name: Build BSC compiler
+        run: |
+          cabal update
+          cabal build
 
--name:SetupBluespec
-run:|
-#InstallBluespeccompilerandsynthesistools
-sudoapt-getupdate
-sudoapt-getinstall-ybuild-essentialgit
+      - name: Set up Bluespec
+        run: |
+          # Install Bluespec compiler and synthesis tools
+          sudo apt-get update
+          sudo apt-get install -y build-essential git
 
--name:CacheBluespecartifacts
-uses:actions/cache@v4
-with:
-path:|
-build/bsvlib
-build/tcllib
-build/sim
-build/verilog
-build/info
-key:${{runner.os}}-bluespec-${{hashFiles('**/*.bs','**/*.bsv')}}
-restore-keys:|
-${{runner.os}}-bluespec-
+      - name: Cache Bluespec artifacts
+        uses: actions/cache@v4
+        with:
+          path: |
+            build/bsvlib
+            build/tcllib
+            build/sim
+            build/verilog
+            build/info
+          key: ${{ runner.os }}-bluespec-${{ hashFiles('**/*.bs', '**/*.bsv') }}
+          restore-keys: |
+            ${{ runner.os }}-bluespec-
 
--name:SynthesizetoVerilog
-run:|
-mkdir-pbuild/synth
-dist-newstyle/build/*/*/*/bsc-*/b/build/bsc/bsc-verilog-bdirbuild/bsvlib-vdirbuild/verilog-simdirbuild/sim-info-dirbuild/info-obuild/synth/synth$(find.-name"*.bs"-o-name"*.bsv")
+      - name: Synthesize to Verilog
+        run: |
+          mkdir -p build/synth
+          dist-newstyle/build/*/*/*/bsc-*/b/build/bsc/bsc -verilog -bdir build/bsvlib -vdir build/verilog -simdir build/sim -info-dir build/info -o build/synth/synth $(find . -name "*.bs" -o -name "*.bsv")
 
--name:CheckVerilogsynthesis
-run:|
-#AddyourpreferredVeriloglinting/synthesistoolhere
-#Forexample:verilator,yosys,etc.
-echo"Verilogsynthesischeckplaceholder"
+      - name: Check Verilog synthesis
+        run: |
+          # Add your preferred Verilog linting/synthesis tool here
+          # For example: verilator, yosys, etc.
+          echo "Verilog synthesis check placeholder"
 
--name:Uploadsynthesisartifacts
-uses:actions/upload-artifact@v4
-with:
-name:synthesis-artifacts
-path:build/synth/
+      - name: Upload synthesis artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: synthesis-artifacts
+          path: build/synth/
