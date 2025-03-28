@@ -17,3 +17,15 @@ bsc.log
 bsc.sum
 dist-newstyle/
 
+# HPC coverage files
+.hpc/
+*.tix
+
+# Editor swap files
+*.swp
+*~
+
+# Build artifacts
+install/
+a.out
+
