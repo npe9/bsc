@@ -1,217 +1,403 @@
 name: CI
 
-# Trigger the workflow on push or pull request
-on: [ push, pull_request ]
+on:
+  push:
+    branches: [ main ]
+  pull_request:
+    branches: [ main ]
 
 jobs:
-
-  # ------------------------------
-  # Basic linting requirements for new commits
-
-  build-check-src:
-    name: "Check: code cleanliness"
-    runs-on: ubuntu-20.04
-    timeout-minutes: 15
-    steps:
-      - uses: actions/checkout@v4
-      - name: Check tabs and whitespace
-        shell: bash
-        run: ".github/workflows/check_whitespace.sh"
-
-  build-check-testsuite:
-    name: "Check: testsuite lint"
-    runs-on: ubuntu-20.04
-    timeout-minutes: 15
-    steps:
-      - uses: actions/checkout@v4
-      - name: Check CONFDIR
-        run: |
-          cd testsuite
-          ../.github/workflows/check_confdir.py
-          ../.github/workflows/check_symlinks.py
-
-  # ------------------------------
-  # Builds for release, using a reliable and stable version of GHC
-
-  build-and-test-ubuntu:
-    strategy:
-      matrix:
-        os: [ ubuntu-20.04, ubuntu-22.04, ubuntu-24.04 ]
-      fail-fast: false
-    name: "Build/Test: ${{ matrix.os }}"
-    uses: ./.github/workflows/build-and-test-ubuntu.yml
-    with:
-      os: ${{ matrix.os }}
-      ghc_version: 9.6.6
-      hls_version: 2.9.0.1
-    secrets: inherit
-
-  build-and-test-macos:
-    strategy:
-      matrix:
-        os: [ macos-13, macos-14, macos-15 ]
-      fail-fast: false
-    name: "Build/Test: ${{ matrix.os }}"
-    uses: ./.github/workflows/build-and-test-macos.yml
-    with:
-      os: ${{ matrix.os }}
-      ghc_version: 9.6.6
-      hls_version: 2.9.0.1
-    secrets: inherit
-
-  # ------------------------------
-  # Tests using other recent versions of GHC, particularly newer ones,
-  # in anticipation of upgrading the release builds to that version
-
-  build-and-test-ghc-ubuntu:
-    strategy:
-      matrix:
-        ghc:
-          - version: 9.4.8
-            hls: 2.9.0.1
-          - version: 9.8.4
-            hls:
-          - version: 9.10.1
-            hls: 2.9.0.1
-          - version: 9.12.1
-            hls:
-      fail-fast: false
-    name: "Build/Test: GHC Ubuntu"
-    uses: ./.github/workflows/build-and-test-ubuntu.yml
-    with:
-      os: ubuntu-22.04
-      ghc_version: ${{ matrix.ghc.version }}
-      hls_version: ${{ matrix.ghc.hls }}
-    secrets: inherit
-
-  build-and-test-ghc-macos:
-    strategy:
-      matrix:
-        ghc:
-          - version: 9.4.8
-            hls: 2.9.0.1
-          - version: 9.8.4
-            hls:
-          - version: 9.10.1
-            hls: 2.9.0.1
-          - version: 9.12.1
-            hls:
-      fail-fast: false
-    name: "Build/Test: GHC macOS"
-    uses: ./.github/workflows/build-and-test-macos.yml
-    with:
-      os: macos-14
-      ghc_version: ${{ matrix.ghc.version }}
-      hls_version: ${{ matrix.ghc.hls }}
-    secrets: inherit
-
-  # ------------------------------
-  # Test the building of documentation
-
-  build-doc-ubuntu:
-    strategy:
-      matrix:
-        os: [ ubuntu-20.04, ubuntu-22.04, ubuntu-24.04 ]
-      fail-fast: false
-    name: "Build doc: ${{ matrix.os }}"
+  build:
     runs-on: ${{ matrix.os }}
-    timeout-minutes: 15
-    steps:
-      - uses: actions/checkout@v4
-      - name: Install dependencies
-        shell: bash
-        run: "sudo .github/workflows/install_dependencies_doc_ubuntu.sh"
-      - name: Build
-        run: |
-          make -j3 install-doc
-          tar czf inst.tar.gz inst
-      # The next two actions upload the PDFs as an artifact that can be downloaded.
-      # We provide two versions: one for release packaging and one for users.
-      # This is because the GitHub download will provide the artifact as a zip-file,
-      # even if the artifact itself is just one file:
-      #   https://github.com/actions/upload-artifact/issues/3
-      #   https://github.com/actions/upload-artifact/issues/14
-      # It is inconvenient for users to access PDFs inside a tarfile inside a zipfile,
-      # therefore we provide an option without the tarfile layer.
-      - name: Upload artifact
-        # This artifact (PDFs inside inst.tar.gz inside artifact.zip) is for release packaging.
-        uses: actions/upload-artifact@v4
-        with:
-          name: ${{ matrix.os }} build doc
-          path: inst.tar.gz
-      - name: Upload doc not tar
-        # This artifact (PDFs inside artifact.zip) is for viewing the built documents.
-        uses: actions/upload-artifact@v4
-        with:
-          name: ${{matrix.os}}-doc-not-tar
-          path: inst/doc
-
-  build-doc-macOS:
     strategy:
       matrix:
-        os: [ macos-13, macos-14, macos-15 ]
-      fail-fast: false
-    name: "Build doc: ${{ matrix.os }}"
-    runs-on: ${{ matrix.os }}
-    timeout-minutes: 60
+        ghc-version: ['9.8.1', '9.6.3', '9.4.8']
+        cabal-version: ['3.10.1.0']
+        os: [ubuntu-latest, ubuntu-22.04, ubuntu-20.04, macos-latest, macos-13, macos-12]
+        exclude:
+          # Exclude older GHC versions on newer OS
+          - os: macos-13
+            ghc-version: '9.4.8'
+          - os: macos-latest
+            ghc-version: '9.4.8'
+          - os: ubuntu-latest
+            ghc-version: '9.4.8'
+
     steps:
-      - uses: actions/checkout@v4
-      - name: Install dependencies
-        shell: bash
-        run: ".github/workflows/install_dependencies_doc_macos.sh"
-      - name: Build
-        run: |
-          # Brew install of mactex doesn't update the path until a new shell is opened
-          export PATH=/Library/TeX/texbin/:$PATH
+    - uses: actions/checkout@v4
 
-          make -j3 install-doc
-          tar czf inst.tar.gz inst
-      # The next two actions upload the PDFs as an artifact that can be downloaded.
-      # We provide two versions: one for release packaging and one for users.
-      # This is because the GitHub download will provide the artifact as a zip-file,
-      # even if the artifact itself is just one file:
-      #   https://github.com/actions/upload-artifact/issues/3
-      #   https://github.com/actions/upload-artifact/issues/14
-      # It is inconvenient for users to access PDFs inside a tarfile inside a zipfile,
-      # therefore we provide an option without the tarfile layer.
-      - name: Upload artifact
-        # This artifact (PDFs inside inst.tar.gz inside artifact.zip) is for release packaging.
-        uses: actions/upload-artifact@v4
-        with:
-          name: ${{ matrix.os }} build doc
-          path: inst.tar.gz
-      - name: Upload doc not tar
-        # This artifact (PDFs inside artifact.zip) is for viewing the built documents.
-        uses: actions/upload-artifact@v4
-        with:
-          name: ${{matrix.os}}-doc-not-tar
-          path: inst/doc
+    - name: Set up GHC ${{ matrix.ghc-version }}
+      uses: haskell/actions/setup@v2
+      with:
+        ghc-version: ${{ matrix.ghc-version }}
+        cabal-version: ${{ matrix.cabal-version }}
 
-  # ------------------------------
-  # Build platform-generic documents for releases
+    - name: Cache dependencies
+      uses: actions/cache@v4
+      with:
+        path: |
+          ~/.cabal/packages
+          ~/.cabal/store
+          dist-newstyle
+        key: ${{ runner.os }}-${{ matrix.ghc-version }}-${{ hashFiles('**/*.cabal', 'cabal.project') }}
+        restore-keys: |
+          ${{ runner.os }}-${{ matrix.ghc-version }}-
 
-  build-releasenotes-ubuntu:
-    # Release Notes only need to be built once, so we build on recent
-    # Ubuntu, not Mac OS.  Later, the release script will copy the
-    # generated release notes to all release tarballs.
-    strategy:
-      matrix:
-        os: [ ubuntu-22.04 ]
-      fail-fast: false
-    name: "Build releasenotes: ${{ matrix.os }}"
-    runs-on: ${{ matrix.os }}
-    timeout-minutes: 15
+    - name: Build with warnings
+      run: |
+        cabal update
+        cabal build --enable-tests --ghc-options="-Wall -Werror -Wcompat -Widentities -Wincomplete-record-updates -Wincomplete-uni-patterns -Wmissing-export-lists -Wmissing-home-modules -Wpartial-fields -Wredundant-constraints -Wunused-packages -Wunused-type-patterns"
+
+    - name: Run tests
+      run: |
+        cabal test --test-show-details=always
+
+    - name: Check formatting
+      run: |
+        cabal run fourmolu -- --mode check $(find . -name "*.hs" -not -path "./dist-newstyle/*")
+
+  docs:
+    runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
-      - name: Install dependencies
-        shell: bash
-        run: "sudo .github/workflows/install_dependencies_releasenotes_ubuntu.sh"
-      - name: Build
-        run: |
-          make install-release
-          tar czf inst.tar.gz inst
-      - name: Upload artifact
-        uses: actions/upload-artifact@v4
-        with:
-          name: ${{ matrix.os }} releasenotes
-          path: inst.tar.gz
+    - uses: actions/checkout@v4
+
+    - name: Set up GHC
+      uses: haskell/actions/setup@v2
+      with:
+        ghc-version: '9.8.1'
+        cabal-version: '3.10.1.0'
+
+    - name: Cache dependencies
+      uses: actions/cache@v4
+      with:
+        path: |
+          ~/.cabal/packages
+          ~/.cabal/store
+          dist-newstyle
+        key: ${{ runner.os }}-ghc-9.8.1-${{ hashFiles('**/*.cabal', 'cabal.project') }}
+        restore-keys: |
+          ${{ runner.os }}-ghc-9.8.1-
+
+    - name: Build with Haddock
+      run: |
+        cabal update
+        cabal haddock --haddock-all --haddock-internal --haddock-html --haddock-hyperlink-source
+
+    - name: Upload Haddock docs
+      uses: actions/upload-artifact@v4
+      with:
+        name: haddock-docs
+        path: dist-newstyle/build/*/*/*/bsc-*/doc/html/bsc/
+
+  lint:
+    runs-on: ubuntu-latest
+    steps:
+    - uses: actions/checkout@v4
+
+    - name: Set up GHC
+      uses: haskell/actions/setup@v2
+      with:
+        ghc-version: '9.8.1'
+        cabal-version: '3.10.1.0'
+
+    - name: Cache dependencies
+      uses: actions/cache@v4
+      with:
+        path: |
+          ~/.cabal/packages
+          ~/.cabal/store
+          dist-newstyle
+        key: ${{ runner.os }}-ghc-9.8.1-${{ hashFiles('**/*.cabal', 'cabal.project') }}
+        restore-keys: |
+          ${{ runner.os }}-ghc-9.8.1-
+
+    - name: Install HLint
+      run: |
+        cabal update
+        cabal install hlint
+
+    - name: Run HLint
+      run: |
+        hlint .
+
+  security:
+    runs-on: ubuntu-latest
+    steps:
+    - uses: actions/checkout@v4
+
+    - name: Set up GHC
+      uses: haskell/actions/setup@v2
+      with:
+        ghc-version: '9.8.1'
+        cabal-version: '3.10.1.0'
+
+    - name: Cache dependencies
+      uses: actions/cache@v4
+      with:
+        path: |
+          ~/.cabal/packages
+          ~/.cabal/store
+          dist-newstyle
+        key: ${{ runner.os }}-ghc-9.8.1-${{ hashFiles('**/*.cabal', 'cabal.project') }}
+        restore-keys: |
+          ${{ runner.os }}-ghc-9.8.1-
+
+    - name: Install dependencies
+      run: |
+        cabal update
+        cabal install --only-dependencies
+
+    - name: Run security audit
+      run: |
+        cabal audit
+
+  dependencies:
+    runs-on: ubuntu-latest
+    steps:
+    - uses: actions/checkout@v4
+
+    - name: Set up GHC
+      uses: haskell/actions/setup@v2
+      with:
+        ghc-version: '9.8.1'
+        cabal-version: '3.10.1.0'
+
+    - name: Cache dependencies
+      uses: actions/cache@v4
+      with:
+        path: |
+          ~/.cabal/packages
+          ~/.cabal/store
+          dist-newstyle
+        key: ${{ runner.os }}-ghc-9.8.1-${{ hashFiles('**/*.cabal', 'cabal.project') }}
+        restore-keys: |
+          ${{ runner.os }}-ghc-9.8.1-
+
+    - name: Check for outdated dependencies
+      run: |
+        cabal outdated
+
+    - name: Check for unused dependencies
+      run: |
+        cabal unused
+
+  coverage:
+    runs-on: ubuntu-latest
+    steps:
+    - uses: actions/checkout@v4
+
+    - name: Set up GHC
+      uses: haskell/actions/setup@v2
+      with:
+        ghc-version: '9.8.1'
+        cabal-version: '3.10.1.0'
+
+    - name: Cache dependencies
+      uses: actions/cache@v4
+      with:
+        path: |
+          ~/.cabal/packages
+          ~/.cabal/store
+          dist-newstyle
+        key: ${{ runner.os }}-ghc-9.8.1-${{ hashFiles('**/*.cabal', 'cabal.project') }}
+        restore-keys: |
+          ${{ runner.os }}-ghc-9.8.1-
+
+    - name: Install hpc
+      run: |
+        cabal install hpc
+
+    - name: Build with coverage
+      run: |
+        cabal update
+        cabal build --enable-tests --enable-coverage
+
+    - name: Run tests with coverage
+      run: |
+        cabal test --test-show-details=always
+
+    - name: Generate coverage report
+      run: |
+        cabal hpc markup --destdir=coverage dist-newstyle/build/*/*/*/bsc-*/hpc/vanilla/tix/bsc-*/bsc.tix
+
+    - name: Upload coverage report
+      uses: actions/upload-artifact@v4
+      with:
+        name: coverage-report
+        path: coverage/
+
+  performance:
+    runs-on: ubuntu-latest
+    steps:
+    - uses: actions/checkout@v4
+
+    - name: Set up GHC
+      uses: haskell/actions/setup@v2
+      with:
+        ghc-version: '9.8.1'
+        cabal-version: '3.10.1.0'
+
+    - name: Cache dependencies
+      uses: actions/cache@v4
+      with:
+        path: |
+          ~/.cabal/packages
+          ~/.cabal/store
+          dist-newstyle
+        key: ${{ runner.os }}-ghc-9.8.1-${{ hashFiles('**/*.cabal', 'cabal.project') }}
+        restore-keys: |
+          ${{ runner.os }}-ghc-9.8.1-
+
+    - name: Install criterion
+      run: |
+        cabal update
+        cabal install criterion
+
+    - name: Run benchmarks
+      run: |
+        cabal bench --benchmark-options="--output bench.html"
+
+    - name: Upload benchmark results
+      uses: actions/upload-artifact@v4
+      with:
+        name: benchmark-results
+        path: bench.html
+
+  memory:
+    runs-on: ubuntu-latest
+    steps:
+    - uses: actions/checkout@v4
+
+    - name: Set up GHC
+      uses: haskell/actions/setup@v2
+      with:
+        ghc-version: '9.8.1'
+        cabal-version: '3.10.1.0'
+
+    - name: Cache dependencies
+      uses: actions/cache@v4
+      with:
+        path: |
+          ~/.cabal/packages
+          ~/.cabal/store
+          dist-newstyle
+        key: ${{ runner.os }}-ghc-9.8.1-${{ hashFiles('**/*.cabal', 'cabal.project') }}
+        restore-keys: |
+          ${{ runner.os }}-ghc-9.8.1-
+
+    - name: Build with memory profiling
+      run: |
+        cabal update
+        cabal build --enable-tests --ghc-options="-prof -fprof-auto -fprof-cafs"
+
+    - name: Run memory leak tests
+      run: |
+        cabal test --test-show-details=always --ghc-options="-prof -fprof-auto -fprof-cafs"
+
+    - name: Generate memory profile
+      run: |
+        cabal exec -- ghc-prof-flamegraph dist-newstyle/build/*/*/*/bsc-*/hpc/vanilla/tix/bsc-*/bsc.tix
+
+    - name: Upload memory profile
+      uses: actions/upload-artifact@v4
+      with:
+        name: memory-profile
+        path: bsc.svg
+
+  static-analysis:
+    runs-on: ubuntu-latest
+    steps:
+    - uses: actions/checkout@v4
+
+    - name: Set up GHC
+      uses: haskell/actions/setup@v2
+      with:
+        ghc-version: '9.8.1'
+        cabal-version: '3.10.1.0'
+
+    - name: Cache dependencies
+      uses: actions/cache@v4
+      with:
+        path: |
+          ~/.cabal/packages
+          ~/.cabal/store
+          dist-newstyle
+        key: ${{ runner.os }}-ghc-9.8.1-${{ hashFiles('**/*.cabal', 'cabal.project') }}
+        restore-keys: |
+          ${{ runner.os }}-ghc-9.8.1-
+
+    - name: Install static analysis tools
+      run: |
+        cabal update
+        cabal install weeder liquidhaskell
+
+    - name: Run Weeder
+      run: |
+        weeder
+
+    - name: Run LiquidHaskell
+      run: |
+        liquid --check-warnings $(find . -name "*.hs" -not -path "./dist-newstyle/*")
+
+  api-compatibility:
+    runs-on: ubuntu-latest
+    steps:
+    - uses: actions/checkout@v4
+
+    - name: Set up GHC
+      uses: haskell/actions/setup@v2
+      with:
+        ghc-version: '9.8.1'
+        cabal-version: '3.10.1.0'
+
+    - name: Cache dependencies
+      uses: actions/cache@v4
+      with:
+        path: |
+          ~/.cabal/packages
+          ~/.cabal/store
+          dist-newstyle
+        key: ${{ runner.os }}-ghc-9.8.1-${{ hashFiles('**/*.cabal', 'cabal.project') }}
+        restore-keys: |
+          ${{ runner.os }}-ghc-9.8.1-
+
+    - name: Install API compatibility tools
+      run: |
+        cabal update
+        cabal install cabal-plan
+
+    - name: Check API compatibility
+      run: |
+        cabal-plan check
+
+  binary-size:
+    runs-on: ubuntu-latest
+    steps:
+    - uses: actions/checkout@v4
+
+    - name: Set up GHC
+      uses: haskell/actions/setup@v2
+      with:
+        ghc-version: '9.8.1'
+        cabal-version: '3.10.1.0'
+
+    - name: Cache dependencies
+      uses: actions/cache@v4
+      with:
+        path: |
+          ~/.cabal/packages
+          ~/.cabal/store
+          dist-newstyle
+        key: ${{ runner.os }}-ghc-9.8.1-${{ hashFiles('**/*.cabal', 'cabal.project') }}
+        restore-keys: |
+          ${{ runner.os }}-ghc-9.8.1-
+
+    - name: Build with size optimization
+      run: |
+        cabal update
+        cabal build --ghc-options="-O2 -split-sections"
+
+    - name: Check binary size
+      run: |
+        ls -lh dist-newstyle/build/*/*/*/bsc-*/b/build/bsc/bsc
+        ls -lh dist-newstyle/build/*/*/*/bsc-*/b/build/bsc/bsc.exe

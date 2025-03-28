@@ -10,11 +10,24 @@ license-file:      LICENSE.txt
 author:            Bluespec Inc.
 maintainer:        B-Lang Maintainers
 category:          Hardware
-build-type:        Custom
+build-type:        Simple
 extra-doc-files:   README.md
                    INSTALL.md
                    DEVELOP.md
 tested-with:       GHC == 9.8.1
+
+data-dir:          src/Libraries
+data-files:        Base1/*.bs
+                   Base1/*.bsv
+                   Base2/*.bs
+                   Base2/*.bsv
+                   Base3-Contexts/*.bs
+                   Base3-Contexts/*.bsv
+                   Base3-Math/*.bs
+                   Base3-Math/*.bsv
+                   Base3-Misc/*.bs
+                   Base3-Misc/*.bsv
+
 extra-source-files: testsuite/config/*.tcl
                    testsuite/lib/*.exp
                    testsuite/bsc.evaluator/**/*.exp
@@ -41,6 +54,12 @@ extra-source-files: testsuite/config/*.tcl
                    src/Libraries/Base3-Misc/*.bsv
                    src/bluetcl/*.tcl
 
+extra-tmp-files:   build/bsvlib/*.bo
+                   build/bsvlib/*.bi
+                   build/bsvlib/*.ba
+                   build/tcllib/bluespec/tclIndex
+                   build/tcllib/bluespec/pkgIndex.tcl
+
 common common-options
     default-language: Haskell2010
     ghc-options:      -Wall
@@ -52,6 +71,8 @@ common common-options
                       -fno-warn-name-shadowing
                       -fno-warn-unused-matches
                       -Wno-dodgy-imports
+                      -fhpc
+                      -fPIC
     if impl(ghc >= 8.0)
         ghc-options:    -Wredundant-constraints
     if impl(ghc >= 8.2)
@@ -61,6 +82,33 @@ common common-options
                         -Wno-partial-fields
     if impl(ghc >= 8.10)
         ghc-options:    -Wunused-packages
+
+    -- Architecture-specific flags
+    if os(darwin)
+        if arch(aarch64)
+            cc-options: -arch arm64 -fPIC
+            ld-options: -arch arm64 -fPIC
+        else
+            cc-options: -arch x86_64 -fPIC
+            ld-options: -arch x86_64 -fPIC
+    if os(linux)
+        cc-options: -fPIC
+        ld-options: -fPIC
+
+    -- TCL library configuration
+    if os(darwin)
+        if arch(aarch64)
+            extra-lib-dirs: /opt/homebrew/lib
+            extra-libraries: tcl9.0
+        else
+            extra-lib-dirs: /usr/local/lib
+            extra-libraries: tcl9.0
+    if os(linux)
+        extra-lib-dirs: /usr/lib/x86_64-linux-gnu
+        extra-libraries: tcl9.0
+    if os(windows)
+        extra-lib-dirs: C:/tcl/lib
+        extra-libraries: tcl90
 
 custom-setup
     setup-depends: base >= 4.20.0.0 && <4.21
@@ -106,10 +154,13 @@ library
     extra-lib-dirs: src/vendor/htcl
     extra-libraries: HSrts-1.0.2
                    , ffi
-                   , tcl8.6
                    , tcl9.0
                    , tclstub
                    , HShtcl-0.1.0.0-inplace
+    build-tool-depends: hsc2hs:hsc2hs
+    c-sources: src/vendor/htcl/HTcl.c
+    cc-options: -fPIC
+    ld-options: -fPIC
     data-dir: src/Libraries
     data-files: Base1/*.bs
                 Base1/*.bsv
@@ -375,7 +426,6 @@ executable bsc
                    , integer-gmp >=1.0.2.0 && <1.2
     extra-libraries: HSrts-1.0.2
                     , ffi
-                    , tcl8.6
                     , tcl9.0
                     , tclstub
                     , HShtcl-0.1.0.0-inplace
@@ -410,27 +460,158 @@ executable bluetcl
                    , generic-data >=1.0.0
     extra-libraries: HSrts-1.0.2
                     , ffi
-                    , tcl8.6
                     , tcl9.0
                     , tclstub
                     , HShtcl-0.1.0.0-inplace
     include-dirs: ${pkgroot}/src/vendor/htcl
     extra-lib-dirs: ${pkgroot}/src/vendor/htcl
-    build-tool-depends: hsc2hs:hsc2hs
     other-modules:    BlueTcl
+                   , ABin
+                   , ABinUtil
+                   , ADumpSchedule
+                   , ADumpScheduleInfo
+                   , AExpr2SBV
+                   , AScheduleInfo
+                   , ASyntax
+                   , ASyntaxUtil
+                   , AUses
+                   , Assump
+                   , Backend
+                   , BackendNamingConventions
+                   , Bag
+                   , Balanced
+                   , BinData
+                   , BinParse
+                   , BinUtil
+                   , BluesimLoader
+                   , BuildVersion
+                   , CCSyntax
+                   , CFreeVars
+                   , CPackageTime
+                   , CSubst
+                   , CSyntax
+                   , CSyntaxTypes
+                   , CSyntaxUtil
+                   , CType
+                   , CVPrint
+                   , Classic
+                   , ConTagInfo
+                   , ContextErrors
+                   , CtxRed
+                   , Depend
+                   , Error
+                   , ErrorMonad
+                   , ErrorUtil
+                   , Eval
+                   , FStringCompat
+                   , FileIOUtil
+                   , FileNameUtil
+                   , Fixity
+                   , Flags
+                   , FlagsDecode
+                   , ForeignFunctions
+                   , GHCPretty
+                   , GenABin
+                   , GenBin
+                   , GenFuncWrap
+                   , GenWrapUtils
+                   , GitInfo
+                   , GlobPattern
+                   , GraphMap
+                   , GraphWrapper
+                   , IOMutVar
+                   , IStateLoc
+                   , ISyntax
+                   , ISyntaxUtil
+                   , IType
+                   , Id
+                   , IdPrint
+                   , InferKind
+                   , InstNodes
+                   , IntLit
+                   , IntegerUtil
+                   , KIMisc
+                   , Lex
+                   , Libs.Parse
+                   , Literal
+                   , Log2
+                   , MakeSymTab
+                   , PFPrint
+                   , PPrint
+                   , PVPrint
+                   , Parse
+                   , Parser.BSV
+                   , Parser.BSV.CVParser
+                   , Parser.BSV.CVParserAssertion
+                   , Parser.BSV.CVParserCommon
+                   , Parser.BSV.CVParserImperative
+                   , Parser.BSV.CVParserUtil
+                   , Parser.Classic
+                   , Parser.Classic.CParser
+                   , Parser.Classic.Warnings
+                   , PoisonUtils
+                   , Position
+                   , Pragma
+                   , PreIds
+                   , PreStrings
+                   , Pred
+                   , Pred2SBV
+                   , Pretty
+                   , Prim
+                   , ProofObligation
+                   , RSchedule
+                   , RealUtil
+                   , SAT
+                   , SATPred
+                   , SCC
+                   , SEMonad
+                   , SchedInfo
+                   , Scheme
+                   , SimCCBlock
+                   , SimDomainInfo
+                   , SimPrimitiveModules
+                   , SpeedyString
+                   , StdPrel
+                   , Subst
+                   , SymTab
+                   , SystemVerilogKeywords
+                   , SystemVerilogTokens
+                   , TCMisc
+                   , TCPat
+                   , TCheck
+                   , TIMonad
+                   , TclUtils
+                   , TmpNam
+                   , TopUtils
+                   , Type
+                   , TypeAnalysis
+                   , TypeAnalysisTclUtil
+                   , TypeCheck
+                   , TypeOps
+                   , Undefined
+                   , Unify
+                   , Util
+                   , VFileName
+                   , VModInfo
+                   , Verilog
+                   , Version
+                   , Wires
 
 test-suite bsc-tests
     type:                exitcode-stdio-1.0
     main-is:            TestMain.hs
+    other-modules:      DejaGNUDriver
+                     , DejaGNUTest
     hs-source-dirs:     testsuite
     build-depends:      base >=4.20.0.0 && <4.21
+                     , bsc
+                     , process >=1.6.9.0 && <1.7
                      , directory >=1.3.6.0 && <1.4
                      , filepath >=1.4.2.1 && <1.5
-                     , process >=1.6.9.0 && <1.7
-                     , bsc
                      , tasty
                      , tasty-hunit
                      , optparse-applicative >=0.15.1.0 && <0.16
+                     , regex-posix ^>=0.96.0.2
     extra-source-files: testsuite/config/*.tcl
                      , testsuite/lib/*.exp
                      , testsuite/bsc.evaluator/**/*.exp
@@ -459,16 +640,49 @@ test-suite bsc-tests
                      , testsuite/bsc.bugs/github/**/*.exp
                      , testsuite/bsc.bugs/pre_bluespec_inc/**/*.exp
                      , testsuite/site.exp
+    ghc-options:     -threaded -rtsopts -with-rtsopts=-N -fhpc
+    hs-source-dirs:  testsuite
     default-language:   Haskell2010
     ghc-options:        -Wall
-                      -Wcompat
-                      -Widentities
-                      -Wno-incomplete-uni-patterns
-                      -Wno-incomplete-record-updates
-                      -fno-warn-orphans
-                      -fno-warn-name-shadowing
-                      -fno-warn-unused-matches
-                      -Wno-dodgy-imports
+                       -Wcompat
+                       -Widentities
+                       -Wincomplete-record-updates
+                       -Wincomplete-uni-patterns
+                       -Wmissing-export-lists
+                       -Wmissing-home-modules
+                       -Wpartial-fields
+                       -Wredundant-constraints
+                       -fno-warn-unused-matches
+                       -Wno-dodgy-imports
+
+test-suite unit-tests
+    type: exitcode-stdio-1.0
+    main-is: TestMain.hs
+    other-modules: DejaGNUDriver
+                , DejaGNUTest
+    hs-source-dirs: testsuite
+    build-depends: base >=4.20.0.0 && <4.21
+                , bsc
+                , tasty
+                , tasty-hunit
+                , regex-posix ^>=0.96.0.2
+                , process >=1.6.9.0 && <1.7
+                , directory >=1.3.6.0 && <1.4
+                , filepath >=1.4.2.1 && <1.5
+                , optparse-applicative >=0.15.1.0 && <0.16
+    default-language: Haskell2010
+    ghc-options: -Wall
+                -Wcompat
+                -Widentities
+                -Wincomplete-record-updates
+                -Wincomplete-uni-patterns
+                -Wmissing-export-lists
+                -Wmissing-home-modules
+                -Wpartial-fields
+                -Wredundant-constraints
+                -fno-warn-unused-matches
+                -Wno-dodgy-imports
+                -fhpc
 
 if os(darwin)
     if arch(aarch64)
@@ -497,51 +711,3 @@ extra-tmp-files: build/bsvlib/*.bo
                 build/tcllib/bluespec/pkgIndex.tcl
 
 build-type:     Custom
-
-test-suite unit-tests
-    import:           common-options
-    type:            exitcode-stdio-1.0
-    hs-source-dirs:  testsuite
-    main-is:         TestMain.hs
-    other-modules:   DejaGNUDriver
-                   , DejaGNUTest
-    build-depends:    base >=4.20.0.0 && <4.21
-                    , array >=0.5.4.0 && <0.6
-                    , containers >=0.6.2.1 && <0.7
-                    , directory >=1.3.6.0 && <1.4
-                    , filepath >=1.4.2.1 && <1.5
-                    , mtl >=2.2.2 && <2.3
-                    , parsec >=3.1.14.0 && <3.2
-                    , process >=1.6.9.0 && <1.7
-                    , syb >=0.7.2.4 && <0.8
-                    , unix >=2.7.2.2 && <2.8
-                    , split >=0.2.5 && <0.3
-                    , text >=1.2.4.0 && <1.3
-                    , bytestring >=0.10.10.1 && <0.12
-                    , regex-compat >=0.95.2.2 && <0.96
-                    , old-time >=1.1.0.4 && <1.2
-                    , time >=1.9.3 && <1.10
-                    , integer-gmp >=1.0.2.0 && <1.2
-                    , bsc
-                    , tasty
-                    , tasty-hunit
-                    , tasty-quickcheck
-                    , optparse-applicative >=0.15.1.0 && <0.16
-    include-dirs: /opt/homebrew/Cellar/tcl-tk@8/8.6.16/include
-                 , /opt/homebrew/Cellar/tcl-tk/9.0.1/include/tcl-tk
-                 , /Users/npe/.ghcup/ghc/9.10.1/lib/ghc-9.10.1/lib/aarch64-osx-ghc-9.10.1/rts-1.0.2/include
-                 , /opt/homebrew/include
-                 , /Users/npe/src/bsc-new/bsc/src/vendor/htcl/include
-    extra-lib-dirs: /opt/homebrew/Cellar/tcl-tk@8/8.6.16/lib
-                   , /opt/homebrew/Cellar/tcl-tk/9.0.1/lib
-                   , /Users/npe/.ghcup/ghc/9.10.1/lib/ghc-9.10.1/lib/aarch64-osx-ghc-9.10.1/rts-1.0.2
-                   , /opt/homebrew/opt/libffi/lib
-                   , /Users/npe/src/bsc-new/bsc/dist-newstyle/build/aarch64-osx/ghc-9.10.1/htcl-0.1.0.0/opt/build
-    extra-libraries: HSrts-1.0.2
-                    , ffi
-                    , tcl8.6
-                    , tcl9.0
-                    , tclstub
-                    , HShtcl-0.1.0.0-inplace
-    ghc-options: -threaded -rtsopts -with-rtsopts=-N
-    build-tool-depends: hsc2hs:hsc2hs

@@ -1,3 +1,5 @@
+{-# LANGUAGE ScopedTypeVariables #-}
+
 module DejaGNUDriver (runDejaGNUDriver) where
 
 import System.Process
@@ -7,11 +9,13 @@ import System.Directory
 import System.Environment (getEnvironment, setEnv)
 import Data.List (isInfixOf, isPrefixOf)
 import Control.Monad (when, filterM)
-import Control.Exception (bracket, catch)
+import Control.Exception (bracket, catch, IOException)
 import Control.Concurrent.MVar (newMVar, takeMVar, putMVar, readMVar, MVar)
 import Data.Function
 import System.IO.Unsafe (unsafePerformIO)
 import System.Environment (getEnv)
+import Data.Maybe (isJust)
+import Text.Regex.Posix (makeRegex, matchTest, Regex)
 
 -- Global flag to track if we should stop on failure
 {-# NOINLINE stopOnFailureVar #-}
@@ -51,7 +55,7 @@ runDejaGNUDriver testFile = do
   let bscPath = binDir </> "bsc"
   
   -- Get cabal's pkgroot
-  pkgroot <- getEnv "PKGROOT" `catch` const (return $ takeDirectory binDir)
+  pkgroot <- getEnv "PKGROOT" `catch` (\(_ :: IOException) -> return $ takeDirectory binDir)
   
   -- Read and parse the .exp file
   contents <- readFile testFile
@@ -72,7 +76,7 @@ runDejaGNUDriver testFile = do
     (do
       setEnv "LD_LIBRARY_PATH" updatedLibPath
       setEnv "TCLLIBPATH" updatedTclPath
-      setEnv "BSC_LIB_PATH" pkgroot </> "lib"
+      setEnv "BSC_LIB_PATH" (pkgroot </> "lib")
       setEnv "PKGROOT" pkgroot
       return ()
     )
@@ -148,12 +152,15 @@ runDejaGNUDriver testFile = do
 -- Extract command type and BSV file name from a test command
 extractCommandInfo :: String -> (String, String, Maybe String)
 extractCommandInfo cmd = 
-  let cmdType = head $ words cmd
-      parts = words cmd
-      fileName = if length parts > 1 then parts !! 1 else ""
+  let trimmed = dropWhile (`elem` " \t") cmd
+      parts = words trimmed
+      cmdType = if null parts then "" else head parts
+      fileName = if length parts > 1 
+                then takeBaseName (parts !! 1)  -- Remove .bsv extension if present
+                else ""
       errorCode = if cmdType == "compile_verilog_fail_error" && length parts > 2 
-                  then Just (parts !! 2) 
-                  else Nothing
+                 then Just (parts !! 2) 
+                 else Nothing
   in (cmdType, fileName, errorCode)
 
 -- Run BSC on a single BSV file
@@ -178,43 +185,69 @@ runBscOnFile bscPath testsuiteDir resultDir bsvFile (cmdType, maybeErrCode) = do
   
   -- Process results based on command type
   case exitCode of
-    -- If there's no command type or it's not a failure command, success is expected
     ExitSuccess -> 
-      if cmdType == "compile_verilog_fail_error" then do
-        putStrLn "ERROR: Test was expected to fail but succeeded."
-        return False
-      else do
-        putStrLn "Test passed as expected."
-        return True
+      case cmdType of
+        cmd | cmd `elem` ["compile_verilog_fail_error", "compile_verilog_fail", "compile_fail", "compile_fail_error"] -> do
+          putStrLn "ERROR: Test was expected to fail but succeeded."
+          return False
+        cmd | cmd `elem` ["test_c_veri_bsv", "test_c_only_bsv", "compile_object_pass", "compile_verilog_pass", "compile_pass"] -> do
+          putStrLn "Test passed as expected."
+          return True
+        _ -> do
+          putStrLn "Test passed as expected."
+          return True
       
-    -- If compilation failed but we expected failure, check error code if specified
+    -- If compilation failed
     ExitFailure code -> 
-      if cmdType == "compile_verilog_fail_error" then
-        case maybeErrCode of
-          -- If specific error code expected, check stderr for it
-          Just errCode -> 
-            if errCode `isInfixOf` stderr then do
-              putStrLn $ "Test failed with expected error code: " ++ errCode
+      case cmdType of
+        "compile_verilog_fail_error" ->
+          case maybeErrCode of
+            -- If specific error code expected, check stderr for it
+            Just errCode -> 
+              let errorPattern = "\\(" ++ errCode ++ "\\)"
+                  regex = makeRegex errorPattern :: Regex
+                  hasErrorCode = matchTest regex stderr
+              in if hasErrorCode then do
+                putStrLn $ "Test failed with expected error code: " ++ errCode
+                return True
+              else do
+                putStrLn $ "Test failed but with wrong error code. Expected: " ++ errCode
+                putStrLn $ "Stderr: " ++ stderr
+                return False
+            -- If just failure expected without specific error code
+            Nothing -> do
+              putStrLn "Test failed as expected."
               return True
-            else do
-              putStrLn $ "Test failed but with wrong error code. Expected: " ++ errCode
-              putStrLn $ "Stderr: " ++ stderr
-              return False
-          -- If just failure expected without specific error code
-          Nothing -> do
-            putStrLn "Test failed as expected."
-            return True
-      else do
-        putStrLn $ "Test executed with exit code: " ++ show code
-        putStrLn "Stdout:"
-        putStrLn stdout
-        putStrLn "Stderr:"
-        putStrLn stderr
-        return False
+        cmd | cmd `elem` ["compile_verilog_fail", "compile_fail", "compile_fail_error"] -> do
+          putStrLn "Test failed as expected."
+          return True
+        _ -> do
+          putStrLn $ "Test failed unexpectedly with exit code: " ++ show code
+          putStrLn "Stdout:"
+          putStrLn stdout
+          putStrLn "Stderr:"
+          putStrLn stderr
+          return False
 
 -- Check if a line is a test command
 isTestCommand :: String -> Bool
-isTestCommand line = any (`isInfixOf` line) ["test_c_veri_bsv", "test_c_only_bsv", "compile_object_pass", "compile_verilog_fail_error"]
+isTestCommand line = 
+  let trimmed = dropWhile (`elem` " \t") line
+      testCommands = [ "test_c_veri_bsv"
+                    , "test_c_only_bsv"
+                    , "compile_object_pass"
+                    , "compile_verilog_fail_error"
+                    , "compile_verilog_pass"
+                    , "compile_verilog_fail"
+                    , "compile_fail"
+                    , "compile_fail_error"
+                    , "compile_pass"
+                    ]
+  in not (null trimmed) && 
+     not ("#" `isPrefixOf` trimmed) &&
+     not ("if" `isPrefixOf` trimmed) &&
+     not ("}" `isPrefixOf` trimmed) &&
+     any (`isInfixOf` trimmed) testCommands
 
 -- Get the bin directory where bsc is located
 getBinDir :: IO FilePath
@@ -267,10 +300,13 @@ getBinDir = do
 
   return bscExeDir
 
--- Match BSV files with their command types
+-- Match BSV files to their command types
 matchFilesToCommands :: [FilePath] -> [(String, String, Maybe String)] -> [(FilePath, (String, Maybe String))]
-matchFilesToCommands bsvFiles commands = 
-  [(bsvFile, (cmdType, errCode)) |
-   bsvFile <- bsvFiles,
-   (cmdType, bsvName, errCode) <- commands,
-   takeBaseName bsvFile == bsvName || takeBaseName bsvFile == takeBaseName bsvName] 
+matchFilesToCommands bsvFiles commands =
+  let -- For each command, try to find a matching BSV file
+      matchCommand (cmdType, baseName, errCode) =
+        case filter (\f -> baseName `isInfixOf` takeBaseName f) bsvFiles of
+          (file:_) -> Just (file, (cmdType, errCode))
+          [] -> Nothing
+  in -- Keep only the successful matches
+     concatMap (maybe [] (:[]) . matchCommand) commands

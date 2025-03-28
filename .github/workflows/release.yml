@@ -1,0 +1,139 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - 'v*' # Push events to matching v*, i.e. v1.0, v20.15.10
+
+jobs:
+  release:
+    runs-on: ${{ matrix.os }}
+    strategy:
+      matrix:
+        ghc-version: ['9.8.1']
+        cabal-version: ['3.10.1.0']
+        os: [ubuntu-latest, ubuntu-22.04, ubuntu-20.04, macos-latest, macos-13, macos-12]
+
+    steps:
+    - uses: actions/checkout@v4
+      with:
+        fetch-depth: 0
+
+    - name: Set up GHC
+      uses: haskell/actions/setup@v2
+      with:
+        ghc-version: ${{ matrix.ghc-version }}
+        cabal-version: ${{ matrix.cabal-version }}
+
+    - name: Cache dependencies
+      uses: actions/cache@v4
+      with:
+        path: |
+          ~/.cabal/packages
+          ~/.cabal/store
+          dist-newstyle
+        key: ${{ runner.os }}-${{ matrix.ghc-version }}-${{ hashFiles('**/*.cabal', 'cabal.project') }}
+        restore-keys: |
+          ${{ runner.os }}-${{ matrix.ghc-version }}-
+
+    - name: Check for outdated dependencies
+      run: |
+        cabal outdated
+
+    - name: Check for unused dependencies
+      run: |
+        cabal unused
+
+    - name: Build with warnings
+      run: |
+        cabal update
+        cabal build --enable-tests --ghc-options="-Wall -Werror -Wcompat -Widentities -Wincomplete-record-updates -Wincomplete-uni-patterns -Wmissing-export-lists -Wmissing-home-modules -Wpartial-fields -Wredundant-constraints -Wunused-packages -Wunused-type-patterns"
+
+    - name: Run tests
+      run: |
+        cabal test --test-show-details=always
+
+    - name: Build with coverage
+      run: |
+        cabal build --enable-tests --enable-coverage
+
+    - name: Run tests with coverage
+      run: |
+        cabal test --test-show-details=always
+
+    - name: Generate coverage report
+      run: |
+        cabal hpc markup --destdir=coverage dist-newstyle/build/*/*/*/bsc-*/hpc/vanilla/tix/bsc-*/bsc.tix
+
+    - name: Build Haddock docs
+      run: |
+        cabal haddock --haddock-all --haddock-internal --haddock-html --haddock-hyperlink-source
+
+    - name: Install performance tools
+      run: |
+        cabal update
+        cabal install criterion
+
+    - name: Run benchmarks
+      run: |
+        cabal bench --benchmark-options="--output bench.html"
+
+    - name: Build with memory profiling
+      run: |
+        cabal build --enable-tests --ghc-options="-prof -fprof-auto -fprof-cafs"
+
+    - name: Run memory leak tests
+      run: |
+        cabal test --test-show-details=always --ghc-options="-prof -fprof-auto -fprof-cafs"
+
+    - name: Generate memory profile
+      run: |
+        cabal exec -- ghc-prof-flamegraph dist-newstyle/build/*/*/*/bsc-*/hpc/vanilla/tix/bsc-*/bsc.tix
+
+    - name: Install static analysis tools
+      run: |
+        cabal update
+        cabal install weeder liquidhaskell
+
+    - name: Run Weeder
+      run: |
+        weeder
+
+    - name: Run LiquidHaskell
+      run: |
+        liquid --check-warnings $(find . -name "*.hs" -not -path "./dist-newstyle/*")
+
+    - name: Install API compatibility tools
+      run: |
+        cabal update
+        cabal install cabal-plan
+
+    - name: Check API compatibility
+      run: |
+        cabal-plan check
+
+    - name: Build with size optimization
+      run: |
+        cabal build --ghc-options="-O2 -split-sections"
+
+    - name: Check binary size
+      run: |
+        ls -lh dist-newstyle/build/*/*/*/bsc-*/b/build/bsc/bsc
+        ls -lh dist-newstyle/build/*/*/*/bsc-*/b/build/bsc/bsc.exe
+
+    - name: Create Release
+      id: create_release
+      uses: softprops/action-gh-release@v1
+      with:
+        files: |
+          dist-newstyle/build/*/*/*/bsc-*/b/build/bsc/bsc
+          dist-newstyle/build/*/*/*/bsc-*/b/build/bsc/bsc.exe
+          dist-newstyle/build/*/*/*/bsc-*/doc/html/bsc/bsc.txt
+          coverage/
+          bench.html
+          bsc.svg
+        draft: false
+        prerelease: false
+        generate_release_notes: true
+      env:
+        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }} 
