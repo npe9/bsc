@@ -26,19 +26,19 @@ library
         tcl9.0
         tclstub
     extra-lib-dirs:
-        /Users/npe/.ghcup/ghc/9.10.1/lib/ghc-9.10.1/lib/aarch64-osx-ghc-9.10.1/rts-1.0.2
+        /Users/npe/.ghcup/ghc/9.2.8/lib/ghc-9.2.8/lib/aarch64-osx-ghc-9.2.8/rts-1.0.2
         /opt/homebrew/opt/libffi/lib
         /opt/homebrew/Cellar/tcl-tk@8/8.6.16/lib
         /opt/homebrew/lib
         /opt/homebrew/Cellar/tcl-tk/9.0.1/lib
     include-dirs:
-        /Users/npe/.ghcup/ghc/9.10.1/lib/ghc-9.10.1/lib/aarch64-osx-ghc-9.10.1/rts-1.0.2/include
+        /Users/npe/.ghcup/ghc/9.2.8/lib/ghc-9.2.8/lib/aarch64-osx-ghc-9.2.8/rts-1.0.2/include
         /opt/homebrew/Cellar/tcl-tk@8/8.6.16/include
         /opt/homebrew/include
         /opt/homebrew/Cellar/tcl-tk/9.0.1/include/tcl-tk
         /opt/homebrew/Cellar/libtommath/1.3.0/include
     install-includes: HTcl.h
     build-depends:
-        base >= 4.20.0.0 && < 4.21,
+        base >= 4.16.4.0 && < 4.17,
         time >= 1.9 && < 2.0
     ghc-shared-options: -dynamic -shared 

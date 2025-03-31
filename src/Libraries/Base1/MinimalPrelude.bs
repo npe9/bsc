@@ -1,0 +1,31 @@
+package MinimalPrelude(Bit, Module, Integer, String, Action, ActionValue, Rules, Bool, Generic, ConcPrim, Monad(..), Bits(..), Eq(..), Literal(..)) where
+
+primitive type MinimalPrelude.Bit :: *
+primitive type MinimalPrelude.Module :: *
+primitive type MinimalPrelude.Integer :: *
+primitive type MinimalPrelude.String :: *
+primitive type MinimalPrelude.Action :: *
+primitive type MinimalPrelude.ActionValue :: *
+primitive type MinimalPrelude.Rules :: *
+primitive type MinimalPrelude.Bool :: *
+primitive type MinimalPrelude.Generic :: *
+primitive type MinimalPrelude.ConcPrim :: *
+
+class MinimalPrelude.Monad m where {
+    return :: a -> m a;
+    bind :: m a -> (a -> m b) -> m b
+}
+
+class MinimalPrelude.Bits a where {
+    pack :: a -> MinimalPrelude.Bit;
+    unpack :: MinimalPrelude.Bit -> a
+}
+
+class MinimalPrelude.Eq a where {
+    (==) :: a -> a -> MinimalPrelude.Bool;
+    (/=) :: a -> a -> MinimalPrelude.Bool
+}
+
+class MinimalPrelude.Literal a where {
+    fromInteger :: MinimalPrelude.Integer -> a
+} 

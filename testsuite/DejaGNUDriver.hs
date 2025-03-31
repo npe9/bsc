@@ -268,7 +268,7 @@ getBinDir = do
   when (not archExists) $
     error $ "architecture directory not found in " ++ buildDir
 
-  let ghcDir = archDir </> "ghc-9.10.1"
+  let ghcDir = archDir </> "ghc-9.2.8"
   ghcExists <- doesDirectoryExist ghcDir
   when (not ghcExists) $
     error $ "GHC version directory not found in " ++ archDir
@@ -278,10 +278,10 @@ getBinDir = do
   when (not bscExists) $
     error $ "bsc version directory not found in " ++ ghcDir
 
-  let optDir = bscDir </> "opt"
+  let optDir = bscDir </> "x" </> "bsc"
   optExists <- doesDirectoryExist optDir
   when (not optExists) $
-    error $ "opt directory not found in " ++ bscDir
+    error $ "x/bsc directory not found in " ++ bscDir
 
   let buildDir2 = optDir </> "build"
   buildExists2 <- doesDirectoryExist buildDir2
