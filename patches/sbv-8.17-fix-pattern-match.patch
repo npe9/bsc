@@ -1,0 +1,11 @@
+diff --git a/Data/SBV/Core/AlgReals.hs b/Data/SBV/Core/AlgReals.hs
+index 1234567..89abcde 100644
+--- a/Data/SBV/Core/AlgReals.hs
++++ b/Data/SBV/Core/AlgReals.hs
+@@ -278,7 +278,7 @@ f25 :: Integer -> [Integer] -> Maybe (Int, String)
+ f25 1 sofar = let (ts, fs)   = partition (== 2) sofar
+-                  [lts, lfs] = map length [ts, fs]
++                  (lts, lfs) = (length ts, length fs)
+                   noOfZeros  = lts `max` lfs
+               in Just (noOfZeros, show (abs (numerator r)  * factor ts fs))
+ f25 _ _ = Nothing 

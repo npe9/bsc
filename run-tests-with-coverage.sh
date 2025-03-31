@@ -1,7 +1,17 @@
 #!/bin/bash
 
+# Exit on error
+set -e
+
 # Clean previous coverage data
 rm -rf dist-newstyle/hpc
+
+# Build and install BSC first
+cabal build
+cabal install
+
+# Build Prelude and core libraries
+./build_prelude.sh
 
 # Build and run tests with coverage
 cabal build --enable-coverage

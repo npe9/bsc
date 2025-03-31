@@ -10,11 +10,11 @@ license-file:      LICENSE.txt
 author:            Bluespec Inc.
 maintainer:        B-Lang Maintainers
 category:          Hardware
-build-type:        Simple
+build-type:        Custom
 extra-doc-files:   README.md
                    INSTALL.md
                    DEVELOP.md
-tested-with:       GHC == 9.8.1
+tested-with:       GHC == 9.2.8
 
 data-dir:          src/Libraries
 data-files:        Base1/*.bs
@@ -23,7 +23,6 @@ data-files:        Base1/*.bs
                    Base2/*.bsv
                    Base3-Contexts/*.bs
                    Base3-Contexts/*.bsv
-                   Base3-Math/*.bs
                    Base3-Math/*.bsv
                    Base3-Misc/*.bs
                    Base3-Misc/*.bsv
@@ -48,7 +47,6 @@ extra-source-files: testsuite/config/*.tcl
                    src/Libraries/Base2/*.bsv
                    src/Libraries/Base3-Contexts/*.bs
                    src/Libraries/Base3-Contexts/*.bsv
-                   src/Libraries/Base3-Math/*.bs
                    src/Libraries/Base3-Math/*.bsv
                    src/Libraries/Base3-Misc/*.bs
                    src/Libraries/Base3-Misc/*.bsv
@@ -73,6 +71,8 @@ common common-options
                       -Wno-dodgy-imports
                       -fhpc
                       -fPIC
+                      -Wno-error=incomplete-uni-patterns
+                      -Wno-error
     if impl(ghc >= 8.0)
         ghc-options:    -Wredundant-constraints
     if impl(ghc >= 8.2)
@@ -111,26 +111,44 @@ common common-options
         extra-libraries: tcl90
 
 custom-setup
-    setup-depends: base >= 4.20.0.0 && <4.21
+    setup-depends: base >= 4.16.4.0 && <4.17
                 , Cabal >= 3.0.0.0
                 , directory >= 1.3.6.0
                 , filepath >= 1.4.2.1
                 , process >= 1.6.9.0
                 , unix >= 2.7.2.2 && <2.8
 
+-- Add custom build targets
+custom-target build-prelude
+    type: build
+    command: mkdir -p build/bsvlib && bsc -p . -bdir build/bsvlib -no-use-prelude src/Libraries/Base1/MinimalPrelude.bs && BSC_PATH=build/bsvlib:$BSC_PATH bsc -p . -bdir build/bsvlib src/Libraries/Base1/Prelude.bs && bsc -p . -bdir build/bsvlib src/Libraries/Base1/PreludeBSV.bsv
+
+custom-target build-libraries
+    type: build
+    command: for f in src/Libraries/Base2/*.bs src/Libraries/Base2/*.bsv; do if [ -f "$f" ]; then echo "Compiling $f..."; bsc -p . -bdir build/bsvlib "$f"; fi; done && for d in src/Libraries/Base3-*; do if [ -d "$d" ]; then echo "Compiling in $d..."; for f in "$d"/*.bsv; do if [ -f "$f" ]; then echo "Compiling $f..."; bsc -p . -bdir build/bsvlib "$f"; fi; done; fi; done
+
+custom-target clean-prelude
+    type: clean
+    command: rm -rf build/bsvlib/* && cd src/vendor/htcl && cabal clean && rm -f HTcl.h && cd ../../..
+
+custom-target clean-htcl
+    type: clean
+    command: cd src/vendor/htcl && cabal clean && rm -f HTcl.h && cd ../../..
+
 library
     import:           common-options
     hs-source-dirs:   src/comp
+                      src/comp/Libs
+                      src/comp/GHC/posix
+                      src/comp/Parser/BSV
+                      src/vendor/htcl
+                      testsuite
                       src/Libraries/Base1
                       src/Libraries/Base2
                       src/Libraries/Base3-Math
                       src/Libraries/Base3-Misc
                       src/Libraries/Base3-Contexts
-                      src/comp/Libs
-                      src/comp/GHC/posix
-                      src/comp/Parser/BSV
-                      src/vendor/htcl
-    build-depends:    base >=4.20.0.0 && <4.21
+    build-depends:    base >=4.16.4.0 && <4.17
                    , array >=0.5.4.0 && <0.6
                    , containers >=0.6.2.1 && <0.7
                    , directory >=1.3.6.0 && <1.4
@@ -147,9 +165,13 @@ library
                    , old-time >=1.1.0.4 && <1.2
                    , time >=1.9.3 && <1.10
                    , gitrev >=1.3.1
-                   , sbv ==11.3
                    , syb >=0.7.2.4 && <0.8
                    , htcl
+                   , generic-data >=1.0.0
+                   , sbv ==9.1
+                   , tasty >=1.4.3
+                   , tasty-hunit >=0.10.0.3
+                   , tasty-golden >=2.3.5
     include-dirs: src/vendor/htcl
     extra-lib-dirs: src/vendor/htcl
     extra-libraries: HSrts-1.0.2
@@ -161,22 +183,6 @@ library
     c-sources: src/vendor/htcl/HTcl.c
     cc-options: -fPIC
     ld-options: -fPIC
-    data-dir: src/Libraries
-    data-files: Base1/*.bs
-                Base1/*.bsv
-                Base2/*.bs
-                Base2/*.bsv
-                Base3-Contexts/*.bs
-                Base3-Contexts/*.bsv
-                Base3-Math/*.bs
-                Base3-Math/*.bsv
-                Base3-Misc/*.bs
-                Base3-Misc/*.bsv
-    extra-tmp-files: build/bsvlib/*.bo
-                    build/bsvlib/*.bi
-                    build/bsvlib/*.ba
-                    build/tcllib/bluespec/tclIndex
-                    build/tcllib/bluespec/pkgIndex.tcl
     exposed-modules:  BSC
                    , Util
                    , VCD
@@ -340,6 +346,9 @@ library
                    , Parser.BSV.CVParserUtil
                    , CPackageTime
                    , GitInfo
+                   , BSC.Verilog.Tests
+                   , BSC.Bluesim.Tests
+                   , BSC.Typechecker.Tests
     other-modules:    ADumpSchedule
                    , AExpr2SBV
                    , BinParse
@@ -401,13 +410,15 @@ library
                    , InlineWires
                    , LambdaCalc
                    , Libs.Parse
+                   , DejaGNUDriver
+                   , DejaGNUTest
 
 executable bsc
     import:           common-options
     hs-source-dirs:   src/exec
     main-is:          Main.hs
     build-depends:    bsc
-                   , base >=4.20.0.0 && <4.21
+                   , base >=4.16.4.0 && <4.17
                    , directory >=1.3.6.0 && <1.4
                    , filepath >=1.4.2.1 && <1.5
                    , process >=1.6.9.0 && <1.7
@@ -438,7 +449,7 @@ executable bluetcl
     c-sources: src/vendor/htcl/haskell.c
     main-is:          Main.hs
     build-depends:    bsc
-                   , base >=4.20.0.0 && <4.21
+                   , base >=4.16.4.0 && <4.17
                    , directory >=1.3.6.0 && <1.4
                    , filepath >=1.4.2.1 && <1.5
                    , process >=1.6.9.0 && <1.7
@@ -456,7 +467,6 @@ executable bluetcl
                    , time >=1.9.3 && <1.10
                    , integer-gmp >=1.0.2.0 && <1.2
                    , syb >=0.7.2.4 && <0.8
-                   , sbv ==11.3
                    , generic-data >=1.0.0
     extra-libraries: HSrts-1.0.2
                     , ffi
@@ -598,62 +608,32 @@ executable bluetcl
                    , Wires
 
 test-suite bsc-tests
-    type:                exitcode-stdio-1.0
-    main-is:            TestMain.hs
-    other-modules:      DejaGNUDriver
-                     , DejaGNUTest
-    hs-source-dirs:     testsuite
-    build-depends:      base >=4.20.0.0 && <4.21
-                     , bsc
-                     , process >=1.6.9.0 && <1.7
-                     , directory >=1.3.6.0 && <1.4
-                     , filepath >=1.4.2.1 && <1.5
-                     , tasty
-                     , tasty-hunit
-                     , optparse-applicative >=0.15.1.0 && <0.16
-                     , regex-posix ^>=0.96.0.2
-    extra-source-files: testsuite/config/*.tcl
-                     , testsuite/lib/*.exp
-                     , testsuite/bsc.evaluator/**/*.exp
-                     , testsuite/bsc.typechecker/**/*.exp
-                     , testsuite/bsc.lib/**/*.exp
-                     , testsuite/bsc.if/**/*.exp
-                     , testsuite/bsc.names/**/*.exp
-                     , testsuite/bsc.bluetcl/**/*.exp
-                     , testsuite/bsc.interra/**/*.exp
-                     , testsuite/bsc.bluesim/**/*.exp
-                     , testsuite/bsc.bugs/bluespec_inc/**/*.exp
-                     , testsuite/bsc.bugs/github/**/*.exp
-                     , testsuite/bsc.bugs/pre_bluespec_inc/**/*.exp
-                     , testsuite/site.exp
-    data-files:         testsuite/config/*.tcl
-                     , testsuite/lib/*.exp
-                     , testsuite/bsc.evaluator/**/*.exp
-                     , testsuite/bsc.typechecker/**/*.exp
-                     , testsuite/bsc.lib/**/*.exp
-                     , testsuite/bsc.if/**/*.exp
-                     , testsuite/bsc.names/**/*.exp
-                     , testsuite/bsc.bluetcl/**/*.exp
-                     , testsuite/bsc.interra/**/*.exp
-                     , testsuite/bsc.bluesim/**/*.exp
-                     , testsuite/bsc.bugs/bluespec_inc/**/*.exp
-                     , testsuite/bsc.bugs/github/**/*.exp
-                     , testsuite/bsc.bugs/pre_bluespec_inc/**/*.exp
-                     , testsuite/site.exp
-    ghc-options:     -threaded -rtsopts -with-rtsopts=-N -fhpc
+    import:           common-options
+    type:            exitcode-stdio-1.0
+    main-is:         TestMain.hs
     hs-source-dirs:  testsuite
-    default-language:   Haskell2010
-    ghc-options:        -Wall
-                       -Wcompat
-                       -Widentities
-                       -Wincomplete-record-updates
-                       -Wincomplete-uni-patterns
-                       -Wmissing-export-lists
-                       -Wmissing-home-modules
-                       -Wpartial-fields
-                       -Wredundant-constraints
-                       -fno-warn-unused-matches
-                       -Wno-dodgy-imports
+    build-depends:   base >=4.16.4.0 && <4.17
+                   , bsc
+                   , tasty >=1.4.3
+                   , tasty-hunit >=0.10.0.3
+                   , tasty-golden >=2.3.5
+                   , directory >=1.3.6.0 && <1.4
+                   , filepath >=1.4.2.1 && <1.5
+                   , process >=1.6.9.0 && <1.7
+                   , containers >=0.6.2.1 && <0.7
+                   , text >=1.2.4.0 && <1.3
+    other-modules:   BSC.Verilog.Tests
+                   , BSC.Bluesim.Tests
+                   , BSC.Typechecker.Tests
+    data-files:      bsc.verilog/**/*.bsv
+                   , bsc.verilog/**/*.bs
+                   , bsc.verilog/**/*.out.expected
+                   , bsc.bluesim/**/*.bsv
+                   , bsc.bluesim/**/*.bs
+                   , bsc.bluesim/**/*.out.expected
+                   , bsc.typechecker/**/*.bsv
+                   , bsc.typechecker/**/*.bs
+                   , bsc.typechecker/**/*.out.expected
 
 test-suite unit-tests
     type: exitcode-stdio-1.0
@@ -661,10 +641,11 @@ test-suite unit-tests
     other-modules: DejaGNUDriver
                 , DejaGNUTest
     hs-source-dirs: testsuite
-    build-depends: base >=4.20.0.0 && <4.21
+    build-depends: base >=4.16.4.0 && <4.17
                 , bsc
                 , tasty
                 , tasty-hunit
+                , tasty-golden >=2.3.5
                 , regex-posix ^>=0.96.0.2
                 , process >=1.6.9.0 && <1.7
                 , directory >=1.3.6.0 && <1.4

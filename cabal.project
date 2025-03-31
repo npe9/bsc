@@ -1,38 +1,61 @@
 packages: .
           src/vendor/htcl
 
-package bsc
-    ghc-options: -fPIC -Wno-dodgy-imports
-    shared: True
-    extra-lib-dirs: ${pkgroot}/src/vendor/htcl
-    extra-include-dirs: ${pkgroot}/src/vendor/htcl
-    tests: True
-    test-show-details: streaming
+with-compiler: ghc-9.2.8
 
-package htcl
-    ghc-options: -fPIC
-    shared: True
-    extra-lib-dirs: ${pkgroot}/src/vendor/htcl
-    extra-include-dirs: ${pkgroot}/src/vendor/htcl
+constraints: text >=1.2.4.0,
+            template-haskell >=2.18.0.0,
+            base >=4.16.4.0,
+            transformers >= 0.5.6.2,
+            transformers-compat >= 0.6.6
 
-package sbv
-    ghc-options: -Wno-dodgy-imports -Wno-unused-imports -Wno-unused-matches -Wno-error=dodgy-imports
+allow-newer: *:base, *:template-haskell, *:text
 
-optimization: 2
-documentation: True
 tests: True
-test-show-details: streaming
-jobs: $ncpus
-keep-going: True
 
-allow-newer: all 
+per-component: True
 
 package *
-  documentation: True
-  haddock-html: True
-  haddock-hoogle: True
-  haddock-internal: True
-  shared: True
+  ghc-options: -Wno-incomplete-uni-patterns -Wno-error=incomplete-uni-patterns -Wno-error -w -fno-warn-incomplete-uni-patterns -fno-warn-error=incomplete-uni-patterns -Wno-all -Wno-everything -Wno-error=all -Wno-error=everything
 
-extra-include-dirs: ${pkgroot}/src/vendor/htcl
-extra-lib-dirs: ${pkgroot}/src/vendor/htcl
+package sbv
+  ghc-options: -Wno-incomplete-uni-patterns -Wno-error=incomplete-uni-patterns -Wno-error -w -fno-warn-incomplete-uni-patterns -fno-warn-error=incomplete-uni-patterns -Wno-all -Wno-everything -Wno-error=all -Wno-error=everything
+
+package bsc
+  ghc-options: -v3
+
+package htcl
+  ghc-options: -v3
+
+package transformers
+  ghc-options: -Wno-unused-imports -Wno-redundant-constraints
+
+package transformers-compat
+  flags: +generic-deriving
+  ghc-options: -XUndecidableInstances 
+               -XFlexibleContexts 
+               -XFlexibleInstances 
+               -XMultiParamTypeClasses 
+               -XTypeFamilies 
+               -XDeriveGeneric 
+               -XStandaloneDeriving 
+               -XDerivingStrategies 
+               -XDerivingVia 
+               -XScopedTypeVariables 
+               -XKindSignatures 
+               -XRankNTypes 
+               -XGADTs 
+               -XEmptyDataDecls 
+               -XDataKinds 
+               -XPolyKinds 
+               -XFunctionalDependencies
+               -XDefaultSignatures
+               -XConstraintKinds
+               -XQuantifiedConstraints
+               -XImpredicativeTypes
+               -XLiberalTypeSynonyms
+               -XExistentialQuantification
+               -XIncoherentInstances
+               -XUndecidableSuperClasses
+               -Wno-unused-imports
+               -Wno-redundant-constraints
