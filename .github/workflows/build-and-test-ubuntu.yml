@@ -52,8 +52,7 @@ jobs:
         run: |
           ccache --zero-stats --max-size 250M
           export PATH=/usr/lib/ccache:$PATH
-          cabal v2-build --ghc-options="+RTS -M5G -A128m -RTS" -j2
-          cabal v2-install --installdir=inst/bin
+          make -j2 install
           tar czf inst.tar.gz inst
       - name: CCache stats
         env:
