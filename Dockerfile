@@ -28,8 +28,10 @@ ENV PATH="/usr/lib/ccache:${PATH}"
 RUN mkdir -p /root/.cabal && \
     echo "repository hackage.haskell.org" > /root/.cabal/config && \
     echo "  url: http://hackage.haskell.org/" >> /root/.cabal/config && \
-    cabal update && \
-    cabal install syb
+    cabal update
+
+# Install syb package
+RUN cabal install syb
 
 # Set working directory
 WORKDIR /work
