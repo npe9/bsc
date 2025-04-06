@@ -29,8 +29,6 @@ RUN mkdir -p /root/.cabal && \
     echo "repository hackage.haskell.org" > /root/.cabal/config && \
     echo "  url: https://hackage.haskell.org/" >> /root/.cabal/config && \
     echo "  secure: True" >> /root/.cabal/config && \
-    echo "remote-repo: hackage.haskell.org:http://hackage.haskell.org/" >> /root/.cabal/config && \
-    echo "remote-repo-cache: /root/.cabal/packages" >> /root/.cabal/config && \
     cabal update && \
     cabal v2-install syb --lib
 
