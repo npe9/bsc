@@ -19,9 +19,7 @@ RUN apt-get update && apt-get install -y \
 
 # Set up Cabal configuration
 RUN mkdir -p /root/.cabal && \
-    echo "repository hackage.haskell.org" > /root/.cabal/config && \
-    echo "  url: http://hackage.haskell.org/" >> /root/.cabal/config && \
-    echo "  secure: True" >> /root/.cabal/config && \
+    echo "remote-repo: hackage.haskell.org:http://hackage.haskell.org/" > /root/.cabal/config && \
     echo "remote-repo-cache: /root/.cabal/packages" >> /root/.cabal/config && \
     echo "local-repo: /root/.cabal/local-repo" >> /root/.cabal/config && \
     echo "package-db: global" >> /root/.cabal/config && \
@@ -34,7 +32,7 @@ RUN mkdir -p /root/.cabal && \
 
 # Update Cabal and install dependencies
 RUN cabal update && \
-    cabal install syb
+    cabal install --lib syb
 
 WORKDIR /work
 ENV CCACHE_DIR=/ccache
