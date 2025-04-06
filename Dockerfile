@@ -19,15 +19,7 @@ RUN apt-get update && apt-get install -y \
 
 # Set up Cabal configuration
 RUN mkdir -p /root/.cabal && \
-    echo "remote-repo: hackage.haskell.org:http://hackage.haskell.org/" > /root/.cabal/config && \
-    echo "remote-repo-cache: /root/.cabal/packages" >> /root/.cabal/config && \
-    echo "package-db: global" >> /root/.cabal/config && \
-    echo "package-db: user" >> /root/.cabal/config && \
-    echo "extra-prog-path: /root/.cabal/bin" >> /root/.cabal/config && \
-    echo "installdir: /root/.cabal/bin" >> /root/.cabal/config && \
-    echo "build-summary: /root/.cabal/logs/build.log" >> /root/.cabal/config && \
-    echo "remote-build-reporting: anonymous" >> /root/.cabal/config && \
-    echo "jobs: \$ncpus" >> /root/.cabal/config
+    echo "remote-repo: hackage.haskell.org:http://hackage.haskell.org/ remote-repo-cache: /root/.cabal/packages package-db: global package-db: user extra-prog-path: /root/.cabal/bin installdir: /root/.cabal/bin build-summary: /root/.cabal/logs/build.log remote-build-reporting: anonymous jobs: \$ncpus" > /root/.cabal/config
 
 # Update Cabal and install dependencies
 RUN cabal update && \
