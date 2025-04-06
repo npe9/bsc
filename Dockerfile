@@ -31,7 +31,8 @@ RUN mkdir -p /root/.cabal && \
     echo "repository hackage.haskell.org" > /root/.cabal/config && \
     echo "  url: http://hackage.haskell.org/" >> /root/.cabal/config && \
     echo "  secure: True" >> /root/.cabal/config && \
-    cabal update
+    cabal update && \
+    cabal install syb
 
 # Set working directory
 WORKDIR /work
