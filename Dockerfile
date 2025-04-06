@@ -58,6 +58,7 @@ COPY . .
 
 # Build command
 CMD ["bash", "-c", "ccache --zero-stats --max-size 250M && \
+    cabal update && \
     cabal v2-build --ghc-options=\"+RTS -M4500M -A128m -RTS\" -j2 && \
     cabal v2-install --installdir=inst/bin && \
     cabal v2-sdist && \
