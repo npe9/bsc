@@ -14,28 +14,53 @@ RUN apt-get update && apt-get install -y \
     python3-pip \
     wget \
     zlib1g-dev \
+    ccache \
     && rm -rf /var/lib/apt/lists/*
 
 # Install GHC and Cabal
-RUN curl -sSL https://get.haskellstack.org/ | sh
-RUN stack setup ghc-9.6.6
-RUN stack install cabal-install
+ENV GHC_VERSION=9.6.6
+ENV CABAL_VERSION=3.10.1.0
 
-# Install ccache
-RUN apt-get update && apt-get install -y ccache && rm -rf /var/lib/apt/lists/*
+RUN wget https://downloads.haskell.org/~ghc/${GHC_VERSION}/ghc-${GHC_VERSION}-x86_64-deb10-linux.tar.xz && \
+    tar -xf ghc-${GHC_VERSION}-x86_64-deb10-linux.tar.xz && \
+    cd ghc-${GHC_VERSION} && \
+    ./configure && \
+    make install && \
+    cd .. && \
+    rm -rf ghc-${GHC_VERSION} ghc-${GHC_VERSION}-x86_64-deb10-linux.tar.xz
 
-# Set up environment
-ENV PATH=/root/.local/bin:/root/.stack/programs/x86_64-linux/ghc-9.6.6/bin:$PATH
+RUN wget https://downloads.haskell.org/~cabal/cabal-install-${CABAL_VERSION}/cabal-install-${CABAL_VERSION}-x86_64-linux-deb10.tar.xz && \
+    tar -xf cabal-install-${CABAL_VERSION}-x86_64-linux-deb10.tar.xz && \
+    mv cabal /usr/local/bin/ && \
+    rm cabal-install-${CABAL_VERSION}-x86_64-linux-deb10.tar.xz
+
+# Configure ccache
 ENV CCACHE_DIR=/ccache
-ENV CCACHE_COMPRESS=1
+ENV CCACHE_COMPRESS=true
 ENV CCACHE_COMPRESSLEVEL=6
+ENV PATH=/usr/lib/ccache:$PATH
 
-# Create work directory
+# Configure cabal
+RUN mkdir -p /ccache && \
+    echo "package *" > /root/.cabal/config && \
+    echo "  optimization: 1" >> /root/.cabal/config && \
+    echo "  split-sections: true" >> /root/.cabal/config && \
+    echo "  ghc-options: -j2 +RTS -M4500M -A128m -RTS" >> /root/.cabal/config
+
+# Set working directory
 WORKDIR /work
 
-# Copy build scripts
-COPY .github/workflows/install_dependencies_ubuntu.sh /scripts/
-RUN chmod +x /scripts/install_dependencies_ubuntu.sh
+# Copy source code
+COPY . .
 
-# Create cache directory
-RUN mkdir -p /ccache
+# Build command
+CMD ["bash", "-c", "ccache --zero-stats --max-size 250M && \
+    cabal v2-build --ghc-options=\"+RTS -M4500M -A128m -RTS\" -j2 && \
+    cabal v2-install --installdir=inst/bin && \
+    cabal v2-sdist && \
+    tar xzf dist-newstyle/sdist/bsc-*.tar.gz -C dist-newstyle/sdist/ && \
+    cd dist-newstyle/sdist/bsc-* && \
+    cabal v2-build --ghc-options=\"+RTS -M4500M -A128m -RTS\" -j2 && \
+    cabal v2-install --installdir=../../../../inst/bin && \
+    cd ../../../.. && \
+    tar czf inst.tar.gz inst"]

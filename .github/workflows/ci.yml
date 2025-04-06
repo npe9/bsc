@@ -6,14 +6,15 @@ on:
   pull_request:
     branches: [ main ]
 
-env:
-  GHC_VERSION: "9.6.6"
-  CABAL_VERSION: "3.10.1.0"
-
 jobs:
   build-ubuntu:
     name: "Build Ubuntu"
     runs-on: ubuntu-latest
+    container:
+      image: ghcr.io/${{ github.repository }}:latest
+      credentials:
+        username: ${{ github.actor }}
+        password: ${{ secrets.GITHUB_TOKEN }}
     steps:
       - uses: actions/checkout@v4
         with:
@@ -36,48 +37,8 @@ jobs:
           git config --global user.email "github-actions@github.com"
           git config --global user.name "GitHub Actions"
 
-      - name: Set up Haskell
-        uses: haskell/actions/setup@v2
-        with:
-          ghc-version: ${{ env.GHC_VERSION }}
-          cabal-version: ${{ env.CABAL_VERSION }}
-
-      - name: Install dependencies
-        run: |
-          sudo apt-get update
-          sudo apt-get install -y \
-            build-essential \
-            curl \
-            git \
-            libffi-dev \
-            libgmp-dev \
-            libncurses-dev \
-            libtinfo-dev \
-            make \
-            python3 \
-            python3-pip \
-            wget \
-            zlib1g-dev \
-            ccache
-
       - name: Build
-        env:
-          CCACHE_DIR: ${{ github.workspace }}/ccache
-          CCACHE_COMPRESS: true
-          CCACHE_COMPRESSLEVEL: 6
-          CABAL_JOBS: 2
-          MAKEFLAGS: "-j2"
         run: |
-          # Configure ccache
-          ccache --zero-stats --max-size 250M
-          export PATH=/usr/lib/ccache:$PATH
-
-          # Configure cabal build options
-          echo "package *" > cabal.project.local
-          echo "  optimization: 1" >> cabal.project.local
-          echo "  split-sections: true" >> cabal.project.local
-          echo "  ghc-options: -j2 +RTS -M4500M -A128m -RTS" >> cabal.project.local
-
           # Build and install
           cabal v2-build --ghc-options="+RTS -M4500M -A128m -RTS" -j2
           cabal v2-install --installdir=inst/bin
@@ -103,6 +64,11 @@ jobs:
     name: "Test Ubuntu"
     needs: build-ubuntu
     runs-on: ubuntu-latest
+    container:
+      image: ghcr.io/${{ github.repository }}:latest
+      credentials:
+        username: ${{ github.actor }}
+        password: ${{ secrets.GITHUB_TOKEN }}
     steps:
       - uses: actions/checkout@v4
         with:
