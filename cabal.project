@@ -1,7 +1,9 @@
 packages: .
 tests: True
-with-compiler: ghc-9.2.8
+with-compiler: ghc-9.6.6
 
 package bsc
   flags: +stp-stub
-  ghc-options: -O2 -Wall -Werror 
+  ghc-options: -O2 -Wall -Werror -j2 +RTS -M4500M -A128m -RTS
+  optimization: 1
+  split-sections: true 

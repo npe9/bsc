@@ -76,13 +76,26 @@ jobs:
           # Configure ccache
           ccache --zero-stats --max-size 250M
           export PATH=/usr/lib/ccache:$PATH
-          
+
           # Configure cabal build options
           echo "package *" >> cabal.project.local
           echo "  optimization: 1" >> cabal.project.local
           echo "  split-sections: true" >> cabal.project.local
-          
-          make -j2 install
+          echo "  ghc-options: -j2 +RTS -M4500M -A128m -RTS" >> cabal.project.local
+
+          # Build and install
+          cabal v2-build --ghc-options="+RTS -M4500M -A128m -RTS" -j2
+          cabal v2-install --installdir=inst/bin
+
+          # Create distribution
+          cabal v2-sdist
+          tar xzf dist-newstyle/sdist/bsc-*.tar.gz -C dist-newstyle/sdist/
+          cd dist-newstyle/sdist/bsc-*
+          cabal v2-build --ghc-options="+RTS -M4500M -A128m -RTS" -j2
+          cabal v2-install --installdir=../../../../inst/bin
+          cd ../../../..
+
+          # Package the installation
           tar czf inst.tar.gz inst
       
       - name: CCache stats
