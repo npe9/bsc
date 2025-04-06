@@ -9,13 +9,13 @@ main = defaultMainWithHooks $ simpleUserHooks
   { buildHook = \pkg lbi hooks flags -> do
       -- Check for required tools and dependencies
       checkDependencies
-      
+
       -- Build external dependencies
       buildExternalDeps
-      
+
       -- Build main components
       buildMainComponents
-      
+
       -- Call the default build hook for Haskell components
       buildHook simpleUserHooks pkg lbi hooks flags
   }
@@ -29,13 +29,13 @@ checkDependencies = do
   checkTool "autoconf"
   checkTool "flex"
   checkTool "bison"
-  
+
   -- Check for required Haskell packages
   checkHaskellPkg "regex-compat"
   checkHaskellPkg "syb"
   checkHaskellPkg "old-time"
   checkHaskellPkg "split"
-  
+
   -- Check for submodules
   checkSubmodule "vendor/yices/v2.6/yices2"
 
@@ -72,10 +72,10 @@ buildExternalDeps :: IO ()
 buildExternalDeps = do
   -- Build STP
   buildInDir "vendor/stp"
-  
+
   -- Build Yices
   buildInDir "vendor/yices"
-  
+
   -- Build HTCL
   buildInDir "vendor/htcl"
 

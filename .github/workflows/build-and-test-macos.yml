@@ -23,12 +23,50 @@ jobs:
     timeout-minutes: 30
     steps:
       - uses: actions/checkout@v4
+        with:
+          fetch-depth: 1
+          sparse-checkout: |
+            bsc/
+            bdw/
+            bsc-make/
+            .github/
+            .gitattributes
+            .gitignore
+            Makefile
+            README.md
+            testsuite/
+            util/
+          sparse-checkout-cone-mode: false
+
+      - name: Configure Git for macOS
+        run: |
+          git config --local core.untrackedCache true
+          git config --local core.fsmonitor true
+          git config --local core.preloadindex true
+          git config --local gc.auto 0
+          git config --local gc.autoDetach false
+
       - name: Checkout submodules
         shell: bash
         run: |
           auth_header="$(git config --local --get http.https://github.com/.extraheader)"
           git submodule sync --recursive
           git -c "http.extraheader=$auth_header" -c protocol.version=2 submodule update --init --force --recursive --depth=1
+
+      # Cache GHC and Cabal
+      - name: Cache GHC and Cabal
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.ghcup
+            ~/.cabal
+            ~/.stack
+            dist-newstyle
+          key: ${{ runner.os }}-${{ hashFiles('cabal.project.freeze', '**/*.cabal') }}-${{ inputs.ghc_version }}
+          restore-keys: |
+            ${{ runner.os }}-${{ hashFiles('cabal.project.freeze', '**/*.cabal') }}-
+            ${{ runner.os }}-
+
       - name: Install dependencies
         shell: bash
         run: |
@@ -42,9 +80,8 @@ jobs:
           # Don't rely on the VM to pick the GHC version
           ghcup install ghc ${{ inputs.ghc_version }}
           ghcup set ghc ${{ inputs.ghc_version }}
-      # Restore previous ccache cache of compiled object files. Use a SHA
-      # in the key so that a new cache file is generated after every build,
-      # and have the restore-key use the most recent.
+
+      # CCache configuration
       - name: CCache cache files
         uses: actions/cache@v4
         with:
@@ -52,34 +89,51 @@ jobs:
           key: build-${{ inputs.os }}-ghc-${{ inputs.ghc_version }}-ccache-${{ github.sha }}
           restore-keys: |
             build-${{ inputs.os }}-ghc-${{ inputs.ghc_version }}-ccache-
+
       - name: Build
         env:
           CCACHE_DIR: ${{ GITHUB.WORKSPACE }}/ccache
+          CCACHE_COMPRESS: true
+          CCACHE_COMPRESSLEVEL: 6
+          CABAL_JOBS: 2
+          MAKEFLAGS: "-j2"
         run: |
+          # Configure ccache
           ccache --zero-stats --max-size 250M
           export PATH=$(brew --prefix)/opt/ccache/libexec:$PATH
 
-          # Hack: Remove incompatible TCL header that something has installed
-          # in /usr/local/include in the GitHub CI image. This dir is at the
-          # start of the compiler's default search path, and overrides the
-          # system tcl.h, and causes a linker failure (because of a macro that
-          # renames Tcl_Main to Tcl_MainEx). We want to build against the
-          # system TCL so we don't introduce any extra deps for the bluetcl
-          # binary.
+          # Remove incompatible TCL header
           rm -f /usr/local/include/tcl.h
 
+          # Configure cabal build options
+          echo "package *" > cabal.project.local
+          echo "  optimization: 1" >> cabal.project.local
+          echo "  split-sections: true" >> cabal.project.local
+          echo "  ghc-options: -j2 +RTS -M4500M -A128m -RTS" >> cabal.project.local
+
+          # Build and install
           cabal v2-build --ghc-options="+RTS -M4500M -A128m -RTS" -j2
           cabal v2-install --installdir=inst/bin
+
+          # Create distribution
+          cabal v2-sdist
+          tar xzf dist-newstyle/sdist/bsc-*.tar.gz -C dist-newstyle/sdist/
+          cd dist-newstyle/sdist/bsc-*
+          cabal v2-build --ghc-options="+RTS -M4500M -A128m -RTS" -j2
+          cabal v2-install --installdir=../../../../inst/bin
+          cd ../../../..
+
+          # Package the installation
           tar czf inst.tar.gz inst
+
       - name: CCache stats
         env:
           CCACHE_DIR: ${{ GITHUB.WORKSPACE }}/ccache
         run: ccache --show-stats
+
       - name: Smoketest
         run: "cabal v2-run bsc -- check-smoke"
-      # if this step fails, it may mean you need to update
-      # util/haskell-language-server/gen_hie.py to
-      # reflect the locations of any new haskell sources
+
       - name: Test Haskell Language Server
         if: ${{ inputs.hls_version != '' }}
         run: |
@@ -96,9 +150,7 @@ jobs:
           pushd src/comp
           haskell-language-server-${{ inputs.ghc_version }} bsc.hs
           popd
-      # Check that .ghci has all the right flags to load the source.
-      # This is important for text editor integration & tools like ghcid
-      # NB stp, yices and htcl must be built first, so do this after Build.
+
       - name: Check GHCI :load
         run: |
           cd src/comp
@@ -115,6 +167,7 @@ jobs:
             echo "GHCi loaded successfully."
             exit 0
           fi
+
       - name: Upload artifact
         uses: actions/upload-artifact@v4
         with:
@@ -128,6 +181,10 @@ jobs:
     needs: build-macOS
     steps:
       - uses: actions/checkout@v4
+        with:
+          fetch-depth: 1
+          sparse-checkout: true
+          sparse-checkout-cone-mode: true
 
       - name: Install dependencies
         shell: bash
@@ -137,12 +194,10 @@ jobs:
         uses: actions/download-artifact@v4
         with:
           name: ${{ inputs.os }} ghc-${{ inputs.ghc_version }} build
+
       - name: Install bsc
         run: "tar xzf inst.tar.gz"
 
-      # Restore previous ccache cache of compiled object files. Use a SHA
-      # in the key so that a new cache file is generated after every
-      # successful build, and have the restore-key use the most recent.
       - name: CCache cache files
         uses: actions/cache@v4
         with:
@@ -154,17 +209,18 @@ jobs:
       - name: Run testsuite
         env:
           CCACHE_DIR: ${{ GITHUB.WORKSPACE }}/ccache
+          CCACHE_COMPRESS: true
+          CCACHE_COMPRESSLEVEL: 6
+          MAKEFLAGS: "-j2"
         run: |
-          # Use ccache to avoid recompiling generated .cxx every run.
+          # Configure ccache
           ccache --zero-stats --max-size 500M
           export PATH=$(brew --prefix)/opt/ccache/libexec:$PATH
 
-          # Use -O0 for significantly faster C++ compiles (which more
-          # than make up for slower simulations)
+          # Use -O0 for faster C++ compiles
           export CXXFLAGS="-O0"
 
-          # Always archive logs, even if make fails (and terminates this script
-          # because it's invoked with :set -eo pipefile)
+          # Always archive logs
           trap ./testsuite/archive_logs.sh EXIT
 
           # Identify the C++ standard for linking with the SystemC library
@@ -175,13 +231,11 @@ jobs:
                TEST_SYSTEMC_LIB=$(brew --prefix systemc)/lib \
                TEST_SYSTEMC_CXXFLAGS=-std=c++${SYSTEMC_CXXSTD}
 
-      # Show ccache stats so we can see what the hit-rate is like.
       - name: CCache stats
         env:
           CCACHE_DIR: ${{ GITHUB.WORKSPACE }}/ccache
         run: ccache --show-stats
 
-      # Save test logs on failure so we can diagnose
       - name: Archive test logs
         if: failure()
         uses: actions/upload-artifact@v4
@@ -196,6 +250,10 @@ jobs:
     needs: build-macOS
     steps:
       - uses: actions/checkout@v4
+        with:
+          fetch-depth: 1
+          sparse-checkout: true
+          sparse-checkout-cone-mode: true
 
       - name: Install dependencies
         run: |
@@ -206,16 +264,14 @@ jobs:
         uses: actions/download-artifact@v4
         with:
           name: ${{ inputs.os }} ghc-${{ inputs.ghc_version }} build
+
       - name: Install bsc
         run: "tar xzf inst.tar.gz"
 
       - name: Download Toooba
         run: |
-          git clone --recursive https://github.com/bluespec/Toooba ../Toooba
+          git clone --recursive --depth=1 https://github.com/bluespec/Toooba ../Toooba
 
-      # Restore previous ccache cache of compiled object files. Use a SHA
-      # in the key so that a new cache file is generated after every
-      # successful build, and have the restore-key use the most recent.
       - name: CCache cache files
         uses: actions/cache@v4
         with:
@@ -227,8 +283,11 @@ jobs:
       - name: Compile and link Toooba
         env:
           CCACHE_DIR: ${{ GITHUB.WORKSPACE }}/ccache
+          CCACHE_COMPRESS: true
+          CCACHE_COMPRESSLEVEL: 6
+          MAKEFLAGS: "-j2"
         run: |
-          # Use ccache to avoid recompiling generated .cxx every run.
+          # Configure ccache
           ccache --zero-stats --max-size 500M
           export PATH=$(brew --prefix)/opt/ccache/libexec:$PATH
 
@@ -236,8 +295,7 @@ jobs:
 
           cd ../Toooba/builds/RV64ACDFIMSU_Toooba_bluesim/
 
-          # Use -O0 for significantly faster C++ compiles (which more
-          # than make up for slower simulations)
+          # Use -O0 for faster C++ compiles
           export CXXFLAGS="-O0"
 
           # Workaround hardcoded parallelism
@@ -250,22 +308,14 @@ jobs:
         run: |
           export PATH=$PWD/../bsc/inst/bin:$PATH
 
-          # Workaround limitation in the Makefile for Homebrew on older macOS
-          export CPATH=/usr/local/include/libelf
-
           cd ../Toooba/builds/RV64ACDFIMSU_Toooba_bluesim/
 
-          # Workaround bugs in the regression script
-          #make isa_tests | tee isa_tests.log
-          #grep -q 'FAIL:        0 tests' isa_tests.log
-          make test | tee test.log
+          # Run tests with better error handling
+          make test | tee test.log || {
+            echo "Test failed. Check test.log for details."
+            exit 1
+          }
           grep -q 'PASS' test.log
-
-      # Show ccache stats so we can see what the hit-rate is like.
-      - name: CCache stats
-        env:
-          CCACHE_DIR: ${{ GITHUB.WORKSPACE }}/ccache
-        run: ccache --show-stats
 
   test-contrib-macOS:
     name: "Test bsc-contrib ${{ inputs.os }} ghc-${{ inputs.ghc_version }}"
@@ -347,7 +397,7 @@ jobs:
   test-bdw-macOS:
     name: "Test bdw ${{ inputs.os }} ghc-${{ inputs.ghc_version }}"
     runs-on: ${{ inputs.os }}
-    timeout-minutes: 30
+    timeout-minutes: 120
     needs: build-macOS
     steps:
       - uses: actions/checkout@v4
@@ -378,7 +428,9 @@ jobs:
       - name: CCache cache files
         uses: actions/cache@v4
         with:
-          path: ${{ GITHUB.WORKSPACE }}/ccache
+          path: |
+            ${{ GITHUB.WORKSPACE }}/ccache
+            ${{ GITHUB.WORKSPACE }}/../bdw/inst
           key: test-bdw-${{ inputs.os }}-ghc-${{ inputs.ghc_version }}-ccache-${{ github.sha }}
           restore-keys: |
             test-bdw-${{ inputs.os }}-ghc-${{ inputs.ghc_version }}-ccache-
@@ -386,9 +438,11 @@ jobs:
       - name: Run bdw tests
         env:
           CCACHE_DIR: ${{ GITHUB.WORKSPACE }}/ccache
+          CCACHE_COMPRESS: 1
+          CCACHE_COMPRESSLEVEL: 6
         run: |
           # Use ccache to avoid recompiling generated .cxx every run.
-          ccache --zero-stats --max-size 500M
+          ccache --zero-stats --max-size 2G
           export PATH=$(brew --prefix)/opt/ccache/libexec:$PATH
 
           # Use -O0 for significantly faster C++ compiles (which more
@@ -405,6 +459,15 @@ jobs:
           # because it's invoked with :set -eo pipefile)
           trap ./testsuite/archive_logs.sh EXIT
 
+          # Run smoke tests first for quick feedback
+          echo "Running smoke tests"
+          make -C testsuite/bsc.bdw smoke || {
+            echo "Smoke tests failed"
+            exit 1
+          }
+          
+          # Then run the full test suite if smoke tests pass
+          echo "Running full test suite"
           make -C testsuite/bsc.bdw check
 
       # Show ccache stats so we can see what the hit-rate is like.

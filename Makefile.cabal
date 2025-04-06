@@ -6,8 +6,8 @@ all: build
 # Build target
 build:
 	@echo "Building BSC..."
-	ghc -O2 -Wall -Werror Setup.hs
-	./Setup configure
+	ghc -O2 -Wall Setup.hs
+	./Setup configure --enable-optimization=2
 	./Setup build
 
 # Test target

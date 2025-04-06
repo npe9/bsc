@@ -9,7 +9,6 @@ license-file: LICENSE.txt
 author: Bluespec, Inc.
 maintainer: cabal-devel@haskell.org
 build-type: Make
-tested-with: GHC==9.2.7, GHC==9.4.7, GHC==9.6.3
 
 extra-source-files:
     README.md
@@ -31,24 +30,11 @@ flag debug
   default: False
   manual: True
 
-library
-  hs-source-dirs: src/comp, src/Parsec
-  exposed-modules:
-    Util
-    Position
-    Id
-    TCheck
-    Type
-    Subst
-    VerilogDollar
-    Prim
-    Pragma
-    StdPrel
-    Synthesize
-    Verilog
-  other-modules:
-    Util
+-- Note: This package uses a custom Make-based build system.
+-- The library and executable sections below are for documentation purposes only.
+-- The actual build is handled by the Setup.hs script using make.
 
+common dependencies
   build-depends:
     base >= 4.8 && < 5,
     containers,
@@ -67,44 +53,20 @@ library
     syb,
     integer-gmp,
     text
-
   default-language: Haskell2010
-  ghc-options: -Wall -fno-warn-orphans -fno-warn-name-shadowing -fno-warn-unused-matches
+
+library
+  -- This is a Make-based build. These declarations are for documentation only.
+  import: dependencies
 
 executable bsc
-  hs-source-dirs: src/comp
-  main-is: bsc.hs
-  other-modules:
-    Util
-    Id
-  build-depends:
-    base >= 4.8 && < 5,
-    bsc,
-    containers,
-    array,
-    mtl,
-    unix,
-    regex-compat,
-    bytestring,
-    directory,
-    process,
-    filepath,
-    time,
-    old-time,
-    old-locale,
-    split,
-    syb,
-    integer-gmp,
-    text
-  default-language: Haskell2010
-  ghc-options: -Wall -fno-warn-orphans -fno-warn-name-shadowing -fno-warn-unused-matches
+  -- This is a Make-based build. These declarations are for documentation only.
+  import: dependencies
 
 test-suite bsc-tests
   type: exitcode-stdio-1.0
   main-is: test_list.sh
   build-depends:
     base >= 4.8 && < 5,
-    bsc,
     process
-  default-language: Haskell2010
-  hs-source-dirs: testsuite 
+  default-language: Haskell2010 
