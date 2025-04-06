@@ -2,9 +2,8 @@
 # Updated to include build process in workflow
 FROM ubuntu:24.04
 
-# Install system dependencies and clean up package lists
-RUN apt-get update && \
-    apt-get install -y \
+# Install required packages
+RUN apt-get update && apt-get install -y \
     build-essential \
     curl \
     git \
@@ -18,26 +17,18 @@ RUN apt-get update && \
     ccache \
     && rm -rf /var/lib/apt/lists/*
 
-# Create .cabal directory and config file
+# Set up Cabal configuration
 RUN mkdir -p /root/.cabal
-RUN echo "repository hackage.haskell.org\n\
-  url: http://hackage.haskell.org/\n\
-  secure: True\n\
-  root-keys: 7541f32a4ccca4f97aea3b22f5e593ba2c0267546016b992dfadcd2fe944e55d\n\
-             26021a13b401500c8eb2761ca95c61f2d625bfef951b939a8124ed12ecf07329\n\
-             f76d08be13e9a61a377a85e2fb63f4c5435d40f8feb3e12eb05905edb8cdea89\n\
-  key-threshold: 3\n\
-  package-index:\n\
-    download-prefix: http://hackage.haskell.org/package/\n\
-    hackage-security:\n\
-      keyids:\n\
-      - 7541f32a4ccca4f97aea3b22f5e593ba2c0267546016b992dfadcd2fe944e55d\n\
-      - 26021a13b401500c8eb2761ca95c61f2d625bfef951b939a8124ed12ecf07329\n\
-      - f76d08be13e9a61a377a85e2fb63f4c5435d40f8feb3e12eb05905edb8cdea89\n\
-      key-threshold: 3" > /root/.cabal/config
+RUN echo "repository hackage.haskell.org" > /root/.cabal/config
+RUN echo "  url: https://hackage.haskell.org/" >> /root/.cabal/config
+RUN echo "  secure: True" >> /root/.cabal/config
+RUN echo "  root-keys: 0a5c7ea47cd1b15f01f5f51a33adda7e655bc0f0b0615baa8e271f4c3351e21d" >> /root/.cabal/config
+RUN echo "  key-threshold: 3" >> /root/.cabal/config
+RUN echo "  package-lists: []" >> /root/.cabal/config
 
-# Update Cabal and install syb
-RUN cabal update && cabal install syb
+# Update Cabal and install dependencies
+RUN cabal update
+RUN cabal install syb
 
 WORKDIR /work
 ENV CCACHE_DIR=/ccache
