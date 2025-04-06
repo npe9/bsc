@@ -146,11 +146,15 @@ jobs:
         with:
           fetch-depth: 1
           sparse-checkout: |
-            doc/
-            .github/workflows/
-            cabal.project
-            cabal.project.freeze
-          sparse-checkout-cone-mode: true
+            bsc/
+            bdw/
+            bsc-make/
+            .github/
+            .gitattributes
+            .gitignore
+            Makefile
+            README.md
+          sparse-checkout-cone-mode: false
 
       - name: Install dependencies
         run: .github/workflows/install_dependencies_doc_ubuntu.sh
@@ -191,11 +195,15 @@ jobs:
         with:
           fetch-depth: 1
           sparse-checkout: |
-            doc/
-            .github/workflows/
-            cabal.project
-            cabal.project.freeze
-          sparse-checkout-cone-mode: true
+            bsc/
+            bdw/
+            bsc-make/
+            .github/
+            .gitattributes
+            .gitignore
+            Makefile
+            README.md
+          sparse-checkout-cone-mode: false
 
       - name: Install dependencies
         run: .github/workflows/install_dependencies_doc_macos.sh

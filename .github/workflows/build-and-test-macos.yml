@@ -26,14 +26,15 @@ jobs:
         with:
           fetch-depth: 1
           sparse-checkout: |
-            src/
+            bsc/
+            bdw/
+            bsc-make/
             .github/
-            testsuite/
-            util/
-            cabal.project
-            cabal.project.freeze
-            *.cabal
-          sparse-checkout-cone-mode: true
+            .gitattributes
+            .gitignore
+            Makefile
+            README.md
+          sparse-checkout-cone-mode: false
 
       - name: Configure Git for macOS
         run: |
