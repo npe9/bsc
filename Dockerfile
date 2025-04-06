@@ -19,12 +19,7 @@ RUN apt-get update && apt-get install -y \
 
 # Set up Cabal configuration
 RUN mkdir -p /root/.cabal && \
-    echo "repository hackage.haskell.org\n\
-  url: http://hackage.haskell.org/\n\
-  secure: True\n\
-  root-keys:\n\
-  key-threshold: 0\n\
-\n\
+    echo "remote-repo: hackage.haskell.org:http://hackage.haskell.org/\n\
 remote-repo-cache: /root/.cabal/packages\n\
 package-db: global\n\
 package-db: user\n\
