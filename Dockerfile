@@ -31,6 +31,7 @@ RUN mkdir -p /root/.cabal && \
     echo "  secure: True" >> /root/.cabal/config && \
     echo "  root-keys: []" >> /root/.cabal/config && \
     echo "  key-threshold: 0" >> /root/.cabal/config && \
+    echo "  package-lists: []" >> /root/.cabal/config && \
     cabal update && \
     cabal v2-install syb --lib
 
