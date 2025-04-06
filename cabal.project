@@ -1,4 +1,4 @@
-packages: .
+packages: bsc.cabal
 tests: True
 with-compiler: ghc-9.6.6
 

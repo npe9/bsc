@@ -78,7 +78,7 @@ jobs:
           export PATH=/usr/lib/ccache:$PATH
 
           # Configure cabal build options
-          echo "package *" >> cabal.project.local
+          echo "package *" > cabal.project.local
           echo "  optimization: 1" >> cabal.project.local
           echo "  split-sections: true" >> cabal.project.local
           echo "  ghc-options: -j2 +RTS -M4500M -A128m -RTS" >> cabal.project.local
