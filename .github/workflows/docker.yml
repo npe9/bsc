@@ -65,7 +65,8 @@ jobs:
           labels: ${{ steps.meta.outputs.labels }}
 
   run-build:
-    needs: [check-image, build-image]
+    needs: [check-image]
+    if: always()
     runs-on: ubuntu-latest
     permissions:
       contents: read
