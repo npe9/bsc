@@ -1,3 +1,5 @@
+# Dockerfile for building BSC with GHC 9.6.6 and Cabal 3.10.1.0
+# Updated to include build process in workflow
 FROM ubuntu:22.04
 
 # Install system dependencies
