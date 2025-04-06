@@ -15,6 +15,8 @@ RUN apt-get update && apt-get install -y \
     ghc \
     cabal-install \
     ccache \
+    dnsutils \
+    iputils-ping \
     && rm -rf /var/lib/apt/lists/* \
     && ghc --version
 
@@ -29,8 +31,11 @@ RUN mkdir -p /root/.cabal && \
     echo "local-repo: /root/.cabal/local-repo" >> /root/.cabal/config && \
     echo "package-db: /root/.cabal/store/package.db" >> /root/.cabal/config
 
-# Update Cabal package list and install dependencies
-RUN cabal update && \
+# Test network connectivity and update Cabal package list
+RUN echo "Testing network connectivity..." && \
+    ping -c 4 hackage.haskell.org && \
+    curl -I http://hackage.haskell.org/ && \
+    cabal update && \
     cabal install --lib syb
 
 WORKDIR /work
