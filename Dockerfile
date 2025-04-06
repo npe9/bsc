@@ -29,6 +29,8 @@ RUN mkdir -p /root/.cabal && \
     echo "repository hackage.haskell.org" > /root/.cabal/config && \
     echo "  url: https://hackage.haskell.org/" >> /root/.cabal/config && \
     echo "  secure: True" >> /root/.cabal/config && \
+    echo "  root-keys: []" >> /root/.cabal/config && \
+    echo "  key-threshold: 0" >> /root/.cabal/config && \
     cabal update && \
     cabal v2-install syb --lib
 
