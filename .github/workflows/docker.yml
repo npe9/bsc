@@ -10,9 +10,26 @@ on:
 env:
   REGISTRY: ghcr.io
   IMAGE_NAME: ${{ github.repository }}
+  DOCKER_IMAGE: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:test-distribution-make
 
 jobs:
-  build-and-push:
+  check-image:
+    runs-on: ubuntu-latest
+    outputs:
+      image_exists: ${{ steps.check.outputs.exists }}
+    steps:
+      - name: Check if image exists
+        id: check
+        run: |
+          if docker manifest inspect ${{ env.DOCKER_IMAGE }} > /dev/null 2>&1; then
+            echo "exists=true" >> $GITHUB_OUTPUT
+          else
+            echo "exists=false" >> $GITHUB_OUTPUT
+          fi
+
+  build-image:
+    needs: check-image
+    if: needs.check-image.outputs.image_exists == 'false'
     runs-on: ubuntu-latest
     permissions:
       contents: read
@@ -37,6 +54,7 @@ jobs:
         uses: docker/metadata-action@v5
         with:
           images: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}
+          tags: test-distribution-make
 
       - name: Build and push Docker image
         uses: docker/build-push-action@v5
@@ -44,4 +62,44 @@ jobs:
           context: .
           push: true
           tags: ${{ steps.meta.outputs.tags }}
-          labels: ${{ steps.meta.outputs.labels }} 
+          labels: ${{ steps.meta.outputs.labels }}
+
+  run-build:
+    needs: [check-image, build-image]
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: read
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Log in to the Container registry
+        uses: docker/login-action@v3
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Pull Docker image
+        run: docker pull ${{ env.DOCKER_IMAGE }}
+
+      - name: Run build process
+        run: |
+          docker run --rm \
+            -v $(pwd):/work \
+            -v $(pwd)/ccache:/ccache \
+            -e CCACHE_DIR=/ccache \
+            ${{ env.DOCKER_IMAGE }}
+
+      - name: Upload build artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: build-artifacts
+          path: |
+            inst.tar.gz
+            dist-newstyle/sdist/ 
