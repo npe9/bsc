@@ -33,7 +33,8 @@ RUN mkdir -p /root/.cabal && \
     echo "  key-threshold: 0" >> /root/.cabal/config && \
     echo "  package-lists: []" >> /root/.cabal/config && \
     cabal update && \
-    cabal v2-install syb --lib
+    cabal v2-install syb --lib && \
+    cabal update
 
 # Set working directory
 WORKDIR /work
