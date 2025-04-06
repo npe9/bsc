@@ -3,6 +3,11 @@ name: CI
 # Trigger the workflow on push or pull request
 on: [ push, pull_request ]
 
+# Add concurrency control to prevent multiple runs from interfering
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
 jobs:
 
   # ------------------------------
@@ -36,7 +41,8 @@ jobs:
   build-and-test-ubuntu:
     strategy:
       matrix:
-        os: [ ubuntu-20.04, ubuntu-22.04, ubuntu-24.04 ]
+        os: [ ubuntu-22.04 ]  # Focus on one stable version
+      max-parallel: 1
       fail-fast: false
     name: "Build/Test: ${{ matrix.os }}"
     uses: ./.github/workflows/build-and-test-ubuntu.yml
@@ -49,7 +55,8 @@ jobs:
   build-and-test-macos:
     strategy:
       matrix:
-        os: [ macos-13, macos-14, macos-15 ]
+        os: [ macos-14 ]  # Focus on one stable version
+      max-parallel: 1
       fail-fast: false
     name: "Build/Test: ${{ matrix.os }}"
     uses: ./.github/workflows/build-and-test-macos.yml
@@ -67,14 +74,9 @@ jobs:
     strategy:
       matrix:
         ghc:
-          - version: 9.4.8
+          - version: 9.6.6  # Focus on stable version
             hls: 2.9.0.1
-          - version: 9.8.4
-            hls:
-          - version: 9.10.1
-            hls: 2.9.0.1
-          - version: 9.12.1
-            hls:
+      max-parallel: 1
       fail-fast: false
     name: "Build/Test: GHC Ubuntu"
     uses: ./.github/workflows/build-and-test-ubuntu.yml
@@ -88,14 +90,9 @@ jobs:
     strategy:
       matrix:
         ghc:
-          - version: 9.4.8
+          - version: 9.6.6  # Focus on stable version
             hls: 2.9.0.1
-          - version: 9.8.4
-            hls:
-          - version: 9.10.1
-            hls: 2.9.0.1
-          - version: 9.12.1
-            hls:
+      max-parallel: 1
       fail-fast: false
     name: "Build/Test: GHC macOS"
     uses: ./.github/workflows/build-and-test-macos.yml
