@@ -27,7 +27,7 @@ ENV PATH="/usr/lib/ccache:${PATH}"
 # Configure Cabal and download package list
 RUN mkdir -p /root/.cabal && \
     echo "repository hackage.haskell.org" > /root/.cabal/config && \
-    echo "  url: http://hackage.haskell.org/" >> /root/.cabal/config && \
+    echo "  url: https://hackage.haskell.org/" >> /root/.cabal/config && \
     cabal update && \
     cabal install syb
 
