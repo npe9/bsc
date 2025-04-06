@@ -15,7 +15,8 @@ RUN apt-get update && apt-get install -y \
     ghc \
     cabal-install \
     ccache \
-    && rm -rf /var/lib/apt/lists/*
+    && rm -rf /var/lib/apt/lists/* \
+    && ghc --version
 
 # Create Cabal config directory and copy config
 RUN mkdir -p /root/.cabal
