@@ -19,8 +19,7 @@ RUN apt-get update && apt-get install -y \
 
 # Update Cabal package list and install dependencies
 RUN cabal update && \
-    cabal install --lib syb && \
-    cabal update
+    cabal install --lib syb
 
 WORKDIR /work
 ENV CCACHE_DIR=/ccache
