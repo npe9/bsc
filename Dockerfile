@@ -49,7 +49,8 @@ RUN mkdir -p /ccache && \
     echo "package *" > /root/.cabal/config && \
     echo "  optimization: 1" >> /root/.cabal/config && \
     echo "  split-sections: true" >> /root/.cabal/config && \
-    echo "  ghc-options: -j2 +RTS -M4500M -A128m -RTS" >> /root/.cabal/config
+    echo "  ghc-options: -j2 +RTS -M4500M -A128m -RTS" >> /root/.cabal/config && \
+    cabal update
 
 # Set working directory
 WORKDIR /work
@@ -59,7 +60,6 @@ COPY . .
 
 # Build command
 CMD ["bash", "-c", "ccache --zero-stats --max-size 250M && \
-    cabal update && \
     cabal v2-build --ghc-options=\"+RTS -M4500M -A128m -RTS\" -j2 && \
     cabal v2-install --installdir=inst/bin && \
     cabal v2-sdist && \
