@@ -2,149 +2,26 @@ name: CI
 
 on:
   push:
-    branches: [ main, develop ]
-    paths-ignore:
-      - '**.md'
-      - 'docs/**'
+    branches: [ main ]
   pull_request:
-    paths-ignore:
-      - '**.md'
-      - 'docs/**'
-  workflow_dispatch:
+    branches: [ main ]
 
-# Add concurrency control to prevent multiple runs from interfering
-concurrency:
-  group: ${{ github.workflow }}-${{ github.ref }}
-  cancel-in-progress: true
+env:
+  GHC_VERSION: "9.6.6"
+  CABAL_VERSION: "3.10.1.0"
 
 jobs:
-
-  # ------------------------------
-  # Basic linting requirements for new commits
-
-  build-check-src:
-    name: "Check: code cleanliness"
-    runs-on: ubuntu-22.04
-    timeout-minutes: 15
+  build-ubuntu:
+    name: "Build Ubuntu"
+    runs-on: ubuntu-latest
+    container:
+      image: ghcr.io/${{ github.repository }}/build-env:latest
+      credentials:
+        username: ${{ github.actor }}
+        password: ${{ secrets.GITHUB_TOKEN }}
     steps:
       - uses: actions/checkout@v4
         with:
-          fetch-depth: 1
-      - name: Check tabs and whitespace
-        shell: bash
-        run: ".github/workflows/check_whitespace.sh"
-
-  build-check-testsuite:
-    name: "Check: testsuite lint"
-    runs-on: ubuntu-22.04
-    timeout-minutes: 15
-    needs: build-check-src
-    steps:
-      - uses: actions/checkout@v4
-        with:
-          fetch-depth: 1
-      - name: Check CONFDIR
-        run: |
-          cd testsuite
-          ../.github/workflows/check_confdir.py
-          ../.github/workflows/check_symlinks.py
-
-  # ------------------------------
-  # Builds for release, using a reliable and stable version of GHC
-
-  build-and-test-ubuntu:
-    needs: build-check-testsuite
-    if: success() && !contains(github.event.head_commit.message, '[skip-tests]')
-    strategy:
-      matrix:
-        os: [ ubuntu-22.04 ]  # Focus on one stable version
-      max-parallel: 1
-      fail-fast: false
-    name: "Build/Test: ${{ matrix.os }}"
-    uses: ./.github/workflows/build-and-test-ubuntu.yml
-    with:
-      os: ${{ matrix.os }}
-      ghc_version: 9.6.6
-      hls_version: 2.9.0.1
-    secrets: inherit
-
-  build-and-test-macos:
-    needs: build-check-testsuite
-    if: success() && !contains(github.event.head_commit.message, '[skip-tests]')
-    strategy:
-      matrix:
-        os: [ macos-14 ]  # Focus on one stable version
-      max-parallel: 1
-      fail-fast: false
-    name: "Build/Test: ${{ matrix.os }}"
-    uses: ./.github/workflows/build-and-test-macos.yml
-    with:
-      os: ${{ matrix.os }}
-      ghc_version: 9.6.6
-      hls_version: 2.9.0.1
-    secrets: inherit
-
-  # ------------------------------
-  # Tests using other recent versions of GHC, particularly newer ones,
-  # in anticipation of upgrading the release builds to that version
-
-  build-and-test-ghc-ubuntu:
-    strategy:
-      matrix:
-        ghc:
-          - version: 9.6.6  # Focus on stable version
-            hls: 2.9.0.1
-      max-parallel: 1
-      fail-fast: false
-    name: "Build/Test: GHC Ubuntu"
-    uses: ./.github/workflows/build-and-test-ubuntu.yml
-    with:
-      os: ubuntu-22.04
-      ghc_version: ${{ matrix.ghc.version }}
-      hls_version: ${{ matrix.ghc.hls }}
-    secrets: inherit
-
-  build-and-test-ghc-macos:
-    strategy:
-      matrix:
-        ghc:
-          - version: 9.6.6  # Focus on stable version
-            hls: 2.9.0.1
-      max-parallel: 1
-      fail-fast: false
-    name: "Build/Test: GHC macOS"
-    uses: ./.github/workflows/build-and-test-macos.yml
-    with:
-      os: macos-14
-      ghc_version: ${{ matrix.ghc.version }}
-      hls_version: ${{ matrix.ghc.hls }}
-    secrets: inherit
-
-  # ------------------------------
-  # Test the building of documentation
-
-  build-doc-ubuntu:
-    needs: build-check-src
-    runs-on: ubuntu-22.04
-    timeout-minutes: 15
-    if: ${{ github.event_name == 'push' && contains(github.event.head_commit.message, '[ci doc]') }}
-    steps:
-      - name: Cache Ubuntu dependencies
-        uses: actions/cache@v4
-        with:
-          path: |
-            /var/cache/apt
-            /var/lib/apt
-            /usr/share/texlive
-            /usr/local/texlive
-          key: ${{ runner.os }}-apt-texlive-${{ hashFiles('.github/workflows/install_dependencies_doc_ubuntu.sh') }}
-          restore-keys: |
-            ${{ runner.os }}-apt-texlive-
-
-      - name: Checkout repository
-        uses: actions/checkout@v4
-        with:
-          fetch-depth: 1
           sparse-checkout: |
             bsc/
             bdw/
@@ -158,44 +35,59 @@ jobs:
             util/
           sparse-checkout-cone-mode: false
 
-      - name: Install dependencies
-        run: .github/workflows/install_dependencies_doc_ubuntu.sh
-      - name: Build
+      - name: Configure Git
         run: |
-          make -j2 install-doc
+          git config --global --add safe.directory /work
+          git config --global user.email "github-actions@github.com"
+          git config --global user.name "GitHub Actions"
+
+      - name: Build
+        env:
+          CCACHE_DIR: /ccache
+          CCACHE_COMPRESS: true
+          CCACHE_COMPRESSLEVEL: 6
+          CABAL_JOBS: 2
+          MAKEFLAGS: "-j2"
+        run: |
+          # Configure cabal build options
+          echo "package *" > cabal.project.local
+          echo "  optimization: 1" >> cabal.project.local
+          echo "  split-sections: true" >> cabal.project.local
+          echo "  ghc-options: -j2 +RTS -M4500M -A128m -RTS" >> cabal.project.local
+
+          # Build and install
+          cabal v2-build --ghc-options="+RTS -M4500M -A128m -RTS" -j2
+          cabal v2-install --installdir=inst/bin
+
+          # Create distribution
+          cabal v2-sdist
+          tar xzf dist-newstyle/sdist/bsc-*.tar.gz -C dist-newstyle/sdist/
+          cd dist-newstyle/sdist/bsc-*
+          cabal v2-build --ghc-options="+RTS -M4500M -A128m -RTS" -j2
+          cabal v2-install --installdir=../../../../inst/bin
+          cd ../../../..
+
+          # Package the installation
           tar czf inst.tar.gz inst
-      - name: Upload artifact
+
+      - name: Upload build artifacts
         uses: actions/upload-artifact@v4
         with:
-          name: ${{ matrix.os }} build doc
+          name: bsc-ubuntu-${{ github.sha }}
           path: inst.tar.gz
-      - name: Upload doc not tar
-        uses: actions/upload-artifact@v4
-        with:
-          name: ${{matrix.os}}-doc-not-tar
-          path: inst/doc
 
-  build-doc-macOS:
-    needs: build-check-src
-    runs-on: macos-14
-    timeout-minutes: 15
-    if: ${{ github.event_name == 'push' && contains(github.event.head_commit.message, '[ci doc]') }}
+  test-ubuntu:
+    name: "Test Ubuntu"
+    needs: build-ubuntu
+    runs-on: ubuntu-latest
+    container:
+      image: ghcr.io/${{ github.repository }}/build-env:latest
+      credentials:
+        username: ${{ github.actor }}
+        password: ${{ secrets.GITHUB_TOKEN }}
     steps:
-      - name: Cache macOS dependencies
-        uses: actions/cache@v4
+      - uses: actions/checkout@v4
         with:
-          path: |
-            ~/Library/Caches/Homebrew
-            /usr/local/Homebrew
-            /usr/local/texlive
-          key: ${{ runner.os }}-brew-texlive-${{ hashFiles('.github/workflows/install_dependencies_doc_macos.sh') }}
-          restore-keys: |
-            ${{ runner.os }}-brew-texlive-
-
-      - name: Checkout repository
-        uses: actions/checkout@v4
-        with:
-          fetch-depth: 1
           sparse-checkout: |
             bsc/
             bdw/
@@ -209,52 +101,23 @@ jobs:
             util/
           sparse-checkout-cone-mode: false
 
-      - name: Install dependencies
-        run: .github/workflows/install_dependencies_doc_macos.sh
-      - name: Build
+      - name: Download build artifacts
+        uses: actions/download-artifact@v4
+        with:
+          name: bsc-ubuntu-${{ github.sha }}
+          path: .
+
+      - name: Extract build artifacts
+        run: tar xzf inst.tar.gz
+
+      - name: Configure Git
         run: |
-          # Brew install of mactex doesn't update the path until a new shell is opened
-          export PATH=/Library/TeX/texbin/:$PATH
+          git config --global --add safe.directory /work
+          git config --global user.email "github-actions@github.com"
+          git config --global user.name "GitHub Actions"
 
-          make -j2 install-doc
-          tar czf inst.tar.gz inst
-      - name: Upload artifact
-        uses: actions/upload-artifact@v4
-        with:
-          name: ${{ matrix.os }} build doc
-          path: inst.tar.gz
-      - name: Upload doc not tar
-        uses: actions/upload-artifact@v4
-        with:
-          name: ${{matrix.os}}-doc-not-tar
-          path: inst/doc
-
-  # ------------------------------
-  # Build platform-generic documents for releases
-
-  build-releasenotes-ubuntu:
-    needs: build-check-src
-    if: github.event_name == 'push' || contains(github.event.pull_request.labels.*.name, 'documentation')
-    strategy:
-      matrix:
-        os: [ ubuntu-22.04 ]
-      fail-fast: false
-    name: "Build releasenotes: ${{ matrix.os }}"
-    runs-on: ${{ matrix.os }}
-    timeout-minutes: 15
-    steps:
-      - uses: actions/checkout@v4
-        with:
-          fetch-depth: 1
-      - name: Install dependencies
-        shell: bash
-        run: "sudo .github/workflows/install_dependencies_releasenotes_ubuntu.sh"
-      - name: Build
+      - name: Run tests
+        env:
+          PATH: ${{ github.workspace }}/inst/bin:$PATH
         run: |
-          make install-release
-          tar czf inst.tar.gz inst
-      - name: Upload artifact
-        uses: actions/upload-artifact@v4
-        with:
-          name: ${{ matrix.os }} releasenotes
-          path: inst.tar.gz
+          make -C testsuite check
