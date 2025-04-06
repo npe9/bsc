@@ -20,6 +20,8 @@ RUN apt-get update && apt-get install -y \
 # Set up Cabal configuration
 RUN mkdir -p /root/.cabal
 COPY cabal.config /root/.cabal/config
+
+# Update Cabal package list and install dependencies
 RUN cabal update && \
     cabal install --lib syb
 
