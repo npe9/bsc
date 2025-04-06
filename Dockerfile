@@ -11,36 +11,41 @@ RUN apt-get update && apt-get install -y \
     libffi-dev \
     libncurses5-dev \
     zlib1g-dev \
-    libtinfo5 \
+    libtinfo-dev \
     ghc \
     cabal-install \
     ccache \
     dnsutils \
     iputils-ping \
+    ca-certificates \
     && rm -rf /var/lib/apt/lists/* \
     && ghc --version
 
-# Create Cabal config directory and set up configuration
+# Set DNS environment variables
+ENV HOSTALIASES=/etc/host.aliases
+RUN echo "hackage.haskell.org 8.8.8.8" > /etc/host.aliases
+
+# Create and configure Cabal
 RUN mkdir -p /root/.cabal && \
     echo "repository hackage.haskell.org" > /root/.cabal/config && \
-    echo "  url: -- http://hackage.haskell.org/" >> /root/.cabal/config && \
+    echo "  url: https://hackage.haskell.org/" >> /root/.cabal/config && \
     echo "  secure: True" >> /root/.cabal/config && \
-    echo "  root-keys: 0a5c7ea47cd1b15f800f7289e56d51643c87d179" >> /root/.cabal/config && \
-    echo "  key-threshold: 3" >> /root/.cabal/config && \
-    echo "remote-repo-cache: /root/.cabal/packages" >> /root/.cabal/config && \
-    echo "local-repo: /root/.cabal/local-repo" >> /root/.cabal/config && \
-    echo "package-db: /root/.cabal/store/package.db" >> /root/.cabal/config && \
-    cabal update && \
-    cabal install --lib syb
+    echo "  root-keys: fe331502606802feac15e514d9b9ea83fee8b6ffef71335479a2e68d84adc6b0" >> /root/.cabal/config && \
+    echo "            1ea9ba32c526d1cc91ab5e5bd364ec5e9e8cb67179a471872f6e26f0ae773d42" >> /root/.cabal/config && \
+    echo "            51f0161b906011b52c6613376b1ae937670da69322113a246a09f807c62f6921" >> /root/.cabal/config && \
+    echo "  key-threshold: 2" >> /root/.cabal/config
 
-# Test network connectivity and update Cabal package list
-RUN echo "Testing network connectivity..." && \
+# Test network connectivity and DNS resolution
+RUN echo "Testing network connectivity and DNS resolution..." && \
     ping -c 4 hackage.haskell.org && \
-    curl -I http://hackage.haskell.org/ && \
-    cabal update && \
+    dig hackage.haskell.org && \
+    curl -v https://hackage.haskell.org/
+
+# Update Cabal package list and install syb
+RUN cabal update && \
     cabal install --lib syb
 
 WORKDIR /work
 ENV CCACHE_DIR=/ccache
 
-CMD ["cabal", "build"]
+CMD ["/bin/bash"]
