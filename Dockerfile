@@ -42,7 +42,7 @@ ENV CCACHE_COMPRESS=true
 ENV CCACHE_COMPRESSLEVEL=6
 ENV PATH=/usr/lib/ccache:$PATH
 
-# Configure cabal
+# Configure cabal and download package list
 RUN mkdir -p /ccache && \
     mkdir -p /root/.cabal && \
     mkdir -p /root/.cabal/packages/hackage.haskell.org && \
@@ -51,9 +51,6 @@ RUN mkdir -p /ccache && \
     echo "  split-sections: true" >> /root/.cabal/config && \
     echo "  ghc-options: -j2 +RTS -M4500M -A128m -RTS" >> /root/.cabal/config && \
     cabal update
-
-# Create a volume for the package list
-VOLUME ["/root/.cabal/packages"]
 
 # Set working directory
 WORKDIR /work
