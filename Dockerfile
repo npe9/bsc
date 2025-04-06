@@ -23,7 +23,8 @@ RUN mkdir -p /root/.cabal && \
     url: https://hackage.haskell.org/\n\
     secure: True\n\
     root-keys: 0a5c7ea47cd1b15f01f5f51a33adda7e655bc0f0b0615baa8e271f4c3351e21d\n\
-    key-threshold: 3" > /root/.cabal/config
+    key-threshold: 3\n\
+    remote-repo: hackage.haskell.org:http://hackage.haskell.org/" > /root/.cabal/config
 
 # Update Cabal and install dependencies
 RUN cabal update && \
