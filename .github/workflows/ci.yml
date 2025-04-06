@@ -1,7 +1,16 @@
 name: CI
 
-# Trigger the workflow on push or pull request
-on: [ push, pull_request ]
+on:
+  push:
+    branches: [ main, develop ]
+    paths-ignore:
+      - '**.md'
+      - 'docs/**'
+  pull_request:
+    paths-ignore:
+      - '**.md'
+      - 'docs/**'
+  workflow_dispatch:
 
 # Add concurrency control to prevent multiple runs from interfering
 concurrency:
@@ -15,20 +24,25 @@ jobs:
 
   build-check-src:
     name: "Check: code cleanliness"
-    runs-on: ubuntu-20.04
+    runs-on: ubuntu-22.04
     timeout-minutes: 15
     steps:
       - uses: actions/checkout@v4
+        with:
+          fetch-depth: 1
       - name: Check tabs and whitespace
         shell: bash
         run: ".github/workflows/check_whitespace.sh"
 
   build-check-testsuite:
     name: "Check: testsuite lint"
-    runs-on: ubuntu-20.04
+    runs-on: ubuntu-22.04
     timeout-minutes: 15
+    needs: build-check-src
     steps:
       - uses: actions/checkout@v4
+        with:
+          fetch-depth: 1
       - name: Check CONFDIR
         run: |
           cd testsuite
@@ -39,6 +53,8 @@ jobs:
   # Builds for release, using a reliable and stable version of GHC
 
   build-and-test-ubuntu:
+    needs: build-check-testsuite
+    if: success() && !contains(github.event.head_commit.message, '[skip-tests]')
     strategy:
       matrix:
         os: [ ubuntu-22.04 ]  # Focus on one stable version
@@ -53,6 +69,8 @@ jobs:
     secrets: inherit
 
   build-and-test-macos:
+    needs: build-check-testsuite
+    if: success() && !contains(github.event.head_commit.message, '[skip-tests]')
     strategy:
       matrix:
         os: [ macos-14 ]  # Focus on one stable version
@@ -106,53 +124,51 @@ jobs:
   # Test the building of documentation
 
   build-doc-ubuntu:
+    needs: build-check-src
+    if: github.event_name == 'push' || contains(github.event.pull_request.labels.*.name, 'documentation')
     strategy:
       matrix:
-        os: [ ubuntu-20.04, ubuntu-22.04, ubuntu-24.04 ]
+        os: [ ubuntu-22.04 ]  # Focus on one stable version
       fail-fast: false
     name: "Build doc: ${{ matrix.os }}"
     runs-on: ${{ matrix.os }}
     timeout-minutes: 15
     steps:
       - uses: actions/checkout@v4
+        with:
+          fetch-depth: 1
       - name: Install dependencies
         shell: bash
         run: "sudo .github/workflows/install_dependencies_doc_ubuntu.sh"
       - name: Build
         run: |
-          make -j3 install-doc
+          make -j2 install-doc
           tar czf inst.tar.gz inst
-      # The next two actions upload the PDFs as an artifact that can be downloaded.
-      # We provide two versions: one for release packaging and one for users.
-      # This is because the GitHub download will provide the artifact as a zip-file,
-      # even if the artifact itself is just one file:
-      #   https://github.com/actions/upload-artifact/issues/3
-      #   https://github.com/actions/upload-artifact/issues/14
-      # It is inconvenient for users to access PDFs inside a tarfile inside a zipfile,
-      # therefore we provide an option without the tarfile layer.
       - name: Upload artifact
-        # This artifact (PDFs inside inst.tar.gz inside artifact.zip) is for release packaging.
         uses: actions/upload-artifact@v4
         with:
           name: ${{ matrix.os }} build doc
           path: inst.tar.gz
       - name: Upload doc not tar
-        # This artifact (PDFs inside artifact.zip) is for viewing the built documents.
         uses: actions/upload-artifact@v4
         with:
           name: ${{matrix.os}}-doc-not-tar
           path: inst/doc
 
   build-doc-macOS:
+    needs: build-check-src
+    if: github.event_name == 'push' || contains(github.event.pull_request.labels.*.name, 'documentation')
     strategy:
       matrix:
-        os: [ macos-13, macos-14, macos-15 ]
+        os: [ macos-14 ]  # Focus on one stable version
       fail-fast: false
     name: "Build doc: ${{ matrix.os }}"
     runs-on: ${{ matrix.os }}
     timeout-minutes: 60
     steps:
       - uses: actions/checkout@v4
+        with:
+          fetch-depth: 1
       - name: Install dependencies
         shell: bash
         run: ".github/workflows/install_dependencies_doc_macos.sh"
@@ -161,24 +177,14 @@ jobs:
           # Brew install of mactex doesn't update the path until a new shell is opened
           export PATH=/Library/TeX/texbin/:$PATH
 
-          make -j3 install-doc
+          make -j2 install-doc
           tar czf inst.tar.gz inst
-      # The next two actions upload the PDFs as an artifact that can be downloaded.
-      # We provide two versions: one for release packaging and one for users.
-      # This is because the GitHub download will provide the artifact as a zip-file,
-      # even if the artifact itself is just one file:
-      #   https://github.com/actions/upload-artifact/issues/3
-      #   https://github.com/actions/upload-artifact/issues/14
-      # It is inconvenient for users to access PDFs inside a tarfile inside a zipfile,
-      # therefore we provide an option without the tarfile layer.
       - name: Upload artifact
-        # This artifact (PDFs inside inst.tar.gz inside artifact.zip) is for release packaging.
         uses: actions/upload-artifact@v4
         with:
           name: ${{ matrix.os }} build doc
           path: inst.tar.gz
       - name: Upload doc not tar
-        # This artifact (PDFs inside artifact.zip) is for viewing the built documents.
         uses: actions/upload-artifact@v4
         with:
           name: ${{matrix.os}}-doc-not-tar
@@ -188,9 +194,8 @@ jobs:
   # Build platform-generic documents for releases
 
   build-releasenotes-ubuntu:
-    # Release Notes only need to be built once, so we build on recent
-    # Ubuntu, not Mac OS.  Later, the release script will copy the
-    # generated release notes to all release tarballs.
+    needs: build-check-src
+    if: github.event_name == 'push' || contains(github.event.pull_request.labels.*.name, 'documentation')
     strategy:
       matrix:
         os: [ ubuntu-22.04 ]
@@ -200,6 +205,8 @@ jobs:
     timeout-minutes: 15
     steps:
       - uses: actions/checkout@v4
+        with:
+          fetch-depth: 1
       - name: Install dependencies
         shell: bash
         run: "sudo .github/workflows/install_dependencies_releasenotes_ubuntu.sh"

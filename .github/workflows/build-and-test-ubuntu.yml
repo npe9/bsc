@@ -24,22 +24,28 @@ jobs:
     steps:
       - uses: actions/checkout@v4
         with:
-          fetch-depth: 1  # Optimize checkout
+          fetch-depth: 1
       - name: Checkout submodules
         shell: bash
         run: |
           auth_header="$(git config --local --get http.https://github.com/.extraheader)"
           git submodule sync --recursive
           git -c "http.extraheader=$auth_header" -c protocol.version=2 submodule update --init --force --recursive --depth=1
-      - name: Cache GHC and HLS
+      
+      # Cache GHC and Cabal
+      - name: Cache GHC and Cabal
         uses: actions/cache@v4
         with:
           path: |
             ~/.ghcup
             ~/.cabal
-          key: ${{ runner.os }}-ghc-${{ inputs.ghc_version }}-hls-${{ inputs.hls_version }}-${{ hashFiles('**/*.cabal') }}
+            ~/.stack
+            dist-newstyle
+          key: ${{ runner.os }}-${{ hashFiles('cabal.project.freeze', '**/*.cabal') }}-${{ inputs.ghc_version }}
           restore-keys: |
-            ${{ runner.os }}-ghc-${{ inputs.ghc_version }}-hls-${{ inputs.hls_version }}-
+            ${{ runner.os }}-${{ hashFiles('cabal.project.freeze', '**/*.cabal') }}-
+            ${{ runner.os }}-
+      
       - name: Install dependencies
         shell: bash
         run: |
@@ -49,6 +55,8 @@ jobs:
             ghcup install ghc ${{ inputs.ghc_version }}
             ghcup set ghc ${{ inputs.ghc_version }}
           fi
+      
+      # CCache configuration
       - name: CCache cache files
         uses: actions/cache@v4
         with:
@@ -56,22 +64,35 @@ jobs:
           key: build-${{ inputs.os }}-ghc-${{ inputs.ghc_version }}-ccache-${{ github.sha }}
           restore-keys: |
             build-${{ inputs.os }}-ghc-${{ inputs.ghc_version }}-ccache-
+      
       - name: Build
         env:
           CCACHE_DIR: ${{ GITHUB.WORKSPACE }}/ccache
           CCACHE_COMPRESS: true
           CCACHE_COMPRESSLEVEL: 6
+          CABAL_JOBS: 2
+          MAKEFLAGS: "-j2"
         run: |
+          # Configure ccache
           ccache --zero-stats --max-size 250M
           export PATH=/usr/lib/ccache:$PATH
+          
+          # Configure cabal build options
+          echo "package *" >> cabal.project.local
+          echo "  optimization: 1" >> cabal.project.local
+          echo "  split-sections: true" >> cabal.project.local
+          
           make -j2 install
           tar czf inst.tar.gz inst
+      
       - name: CCache stats
         env:
           CCACHE_DIR: ${{ GITHUB.WORKSPACE }}/ccache
         run: ccache --show-stats
+      
       - name: Smoketest
         run: "cabal v2-run bsc -- check-smoke"
+      
       - name: Test Haskell Language Server
         if: ${{ inputs.hls_version != '' }}
         run: |
@@ -89,6 +110,7 @@ jobs:
           pushd src/comp
           haskell-language-server-${{ inputs.ghc_version }} bsc.hs
           popd
+      
       - name: Check GHCI :load
         run: |
           cd src/comp
@@ -105,6 +127,7 @@ jobs:
             echo "GHCi loaded successfully."
             exit 0
           fi
+      
       - name: Upload artifact
         uses: actions/upload-artifact@v4
         with:
@@ -118,6 +141,10 @@ jobs:
     needs: build-ubuntu
     steps:
       - uses: actions/checkout@v4
+        with:
+          fetch-depth: 1
+          sparse-checkout: true
+          sparse-checkout-cone-mode: true
 
       - name: Install dependencies
         shell: bash
@@ -127,12 +154,10 @@ jobs:
         uses: actions/download-artifact@v4
         with:
           name: ${{ inputs.os }} ghc-${{ inputs.ghc_version }} build
+      
       - name: Install bsc
         run: "tar xzf inst.tar.gz"
 
-      # Restore previous ccache cache of compiled object files. Use a SHA
-      # in the key so that a new cache file is generated after every
-      # successful build, and have the restore-key use the most recent.
       - name: CCache cache files
         uses: actions/cache@v4
         with:
@@ -144,33 +169,31 @@ jobs:
       - name: Run testsuite
         env:
           CCACHE_DIR: ${{ GITHUB.WORKSPACE }}/ccache
+          CCACHE_COMPRESS: true
+          CCACHE_COMPRESSLEVEL: 6
+          MAKEFLAGS: "-j2"
         run: |
-          # Use ccache to avoid recompiling generated .cxx every run.
+          # Configure ccache
           ccache --zero-stats --max-size 500M
           export PATH=/usr/lib/ccache:$PATH
 
-          # Use the LLVM linker as the C++ linker
-          # for a moderate build-time speedup over ld.bfd
+          # Use the LLVM linker for better performance
           export LINKER=lld
           export LDFLAGS="-Wl,-fuse-ld=$LINKER"
 
-          # Use -O0 for significantly faster C++ compiles (which more
-          # than make up for slower simulations)
+          # Use -O0 for faster C++ compiles
           export CXXFLAGS="-O0"
 
-          # Always archive logs, even if make fails (and terminates this script
-          # because it's invoked with :set -eo pipefile)
+          # Always archive logs
           trap ./testsuite/archive_logs.sh EXIT
 
           make -C testsuite
 
-      # Show ccache stats so we can see what the hit-rate is like.
       - name: CCache stats
         env:
           CCACHE_DIR: ${{ GITHUB.WORKSPACE }}/ccache
         run: ccache --show-stats
 
-      # Save test logs on failure so we can diagnose
       - name: Archive test logs
         if: failure()
         uses: actions/upload-artifact@v4
@@ -185,6 +208,10 @@ jobs:
     needs: build-ubuntu
     steps:
       - uses: actions/checkout@v4
+        with:
+          fetch-depth: 1
+          sparse-checkout: true
+          sparse-checkout-cone-mode: true
 
       - name: Install dependencies
         run: |
@@ -195,16 +222,14 @@ jobs:
         uses: actions/download-artifact@v4
         with:
           name: ${{ inputs.os }} ghc-${{ inputs.ghc_version }} build
+      
       - name: Install bsc
         run: "tar xzf inst.tar.gz"
 
       - name: Download Toooba
         run: |
-          git clone --recursive https://github.com/bluespec/Toooba ../Toooba
+          git clone --recursive --depth=1 https://github.com/bluespec/Toooba ../Toooba
 
-      # Restore previous ccache cache of compiled object files. Use a SHA
-      # in the key so that a new cache file is generated after every
-      # successful build, and have the restore-key use the most recent.
       - name: CCache cache files
         uses: actions/cache@v4
         with:
@@ -216,8 +241,11 @@ jobs:
       - name: Compile and link Toooba
         env:
           CCACHE_DIR: ${{ GITHUB.WORKSPACE }}/ccache
+          CCACHE_COMPRESS: true
+          CCACHE_COMPRESSLEVEL: 6
+          MAKEFLAGS: "-j2"
         run: |
-          # Use ccache to avoid recompiling generated .cxx every run.
+          # Configure ccache
           ccache --zero-stats --max-size 500M
           export PATH=/usr/lib/ccache:$PATH
 
@@ -225,8 +253,7 @@ jobs:
 
           cd ../Toooba/builds/RV64ACDFIMSU_Toooba_bluesim/
 
-          # Use -O0 for significantly faster C++ compiles (which more
-          # than make up for slower simulations)
+          # Use -O0 for faster C++ compiles
           export CXXFLAGS="-O0"
 
           # Workaround hardcoded parallelism
@@ -241,17 +268,12 @@ jobs:
 
           cd ../Toooba/builds/RV64ACDFIMSU_Toooba_bluesim/
 
-          # Workaround bugs in the regression script
-          #make isa_tests | tee isa_tests.log
-          #grep -q 'FAIL:        0 tests' isa_tests.log
-          make test | tee test.log
+          # Run tests with better error handling
+          make test | tee test.log || {
+            echo "Test failed. Check test.log for details."
+            exit 1
+          }
           grep -q 'PASS' test.log
-
-      # Show ccache stats so we can see what the hit-rate is like.
-      - name: CCache stats
-        env:
-          CCACHE_DIR: ${{ GITHUB.WORKSPACE }}/ccache
-        run: ccache --show-stats
 
   test-contrib-ubuntu:
     name: "Test bsc-contrib ${{ inputs.os }} ghc-${{ inputs.ghc_version }}"
