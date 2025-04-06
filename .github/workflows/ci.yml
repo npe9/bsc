@@ -125,21 +125,35 @@ jobs:
 
   build-doc-ubuntu:
     needs: build-check-src
-    if: github.event_name == 'push' || contains(github.event.pull_request.labels.*.name, 'documentation')
-    strategy:
-      matrix:
-        os: [ ubuntu-22.04 ]  # Focus on one stable version
-      fail-fast: false
-    name: "Build doc: ${{ matrix.os }}"
-    runs-on: ${{ matrix.os }}
+    runs-on: ubuntu-22.04
     timeout-minutes: 15
+    if: ${{ github.event_name == 'push' && contains(github.event.head_commit.message, '[ci doc]') }}
     steps:
-      - uses: actions/checkout@v4
+      - name: Cache Ubuntu dependencies
+        uses: actions/cache@v4
+        with:
+          path: |
+            /var/cache/apt
+            /var/lib/apt
+            /usr/share/texlive
+            /usr/local/texlive
+          key: ${{ runner.os }}-apt-texlive-${{ hashFiles('.github/workflows/install_dependencies_doc_ubuntu.sh') }}
+          restore-keys: |
+            ${{ runner.os }}-apt-texlive-
+
+      - name: Checkout repository
+        uses: actions/checkout@v4
         with:
           fetch-depth: 1
+          sparse-checkout: |
+            doc/
+            .github/workflows/
+            cabal.project
+            cabal.project.freeze
+          sparse-checkout-cone-mode: true
+
       - name: Install dependencies
-        shell: bash
-        run: "sudo .github/workflows/install_dependencies_doc_ubuntu.sh"
+        run: .github/workflows/install_dependencies_doc_ubuntu.sh
       - name: Build
         run: |
           make -j2 install-doc
@@ -157,21 +171,34 @@ jobs:
 
   build-doc-macOS:
     needs: build-check-src
-    if: github.event_name == 'push' || contains(github.event.pull_request.labels.*.name, 'documentation')
-    strategy:
-      matrix:
-        os: [ macos-14 ]  # Focus on one stable version
-      fail-fast: false
-    name: "Build doc: ${{ matrix.os }}"
-    runs-on: ${{ matrix.os }}
-    timeout-minutes: 60
+    runs-on: macos-14
+    timeout-minutes: 15
+    if: ${{ github.event_name == 'push' && contains(github.event.head_commit.message, '[ci doc]') }}
     steps:
-      - uses: actions/checkout@v4
+      - name: Cache macOS dependencies
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/Library/Caches/Homebrew
+            /usr/local/Homebrew
+            /usr/local/texlive
+          key: ${{ runner.os }}-brew-texlive-${{ hashFiles('.github/workflows/install_dependencies_doc_macos.sh') }}
+          restore-keys: |
+            ${{ runner.os }}-brew-texlive-
+
+      - name: Checkout repository
+        uses: actions/checkout@v4
         with:
           fetch-depth: 1
+          sparse-checkout: |
+            doc/
+            .github/workflows/
+            cabal.project
+            cabal.project.freeze
+          sparse-checkout-cone-mode: true
+
       - name: Install dependencies
-        shell: bash
-        run: ".github/workflows/install_dependencies_doc_macos.sh"
+        run: .github/workflows/install_dependencies_doc_macos.sh
       - name: Build
         run: |
           # Brew install of mactex doesn't update the path until a new shell is opened
