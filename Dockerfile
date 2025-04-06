@@ -52,6 +52,9 @@ RUN mkdir -p /ccache && \
     echo "  ghc-options: -j2 +RTS -M4500M -A128m -RTS" >> /root/.cabal/config && \
     cabal update
 
+# Create a volume for the package list
+VOLUME ["/root/.cabal/packages"]
+
 # Set working directory
 WORKDIR /work
 
