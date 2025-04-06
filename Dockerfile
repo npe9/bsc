@@ -23,11 +23,11 @@ ENV CABAL_VERSION=3.10.1.0
 
 RUN wget https://downloads.haskell.org/~ghc/${GHC_VERSION}/ghc-${GHC_VERSION}-x86_64-ubuntu20_04-linux.tar.xz && \
     tar -xf ghc-${GHC_VERSION}-x86_64-ubuntu20_04-linux.tar.xz && \
-    cd ghc-${GHC_VERSION} && \
+    cd ghc-${GHC_VERSION}-x86_64-unknown-linux && \
     ./configure && \
     make install && \
     cd .. && \
-    rm -rf ghc-${GHC_VERSION} ghc-${GHC_VERSION}-x86_64-ubuntu20_04-linux.tar.xz
+    rm -rf ghc-${GHC_VERSION}-x86_64-unknown-linux ghc-${GHC_VERSION}-x86_64-ubuntu20_04-linux.tar.xz
 
 RUN wget https://downloads.haskell.org/~cabal/cabal-install-${CABAL_VERSION}/cabal-install-${CABAL_VERSION}-x86_64-linux-ubuntu20.04.tar.xz && \
     tar -xf cabal-install-${CABAL_VERSION}-x86_64-linux-ubuntu20.04.tar.xz && \
