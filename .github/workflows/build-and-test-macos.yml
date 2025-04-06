@@ -34,6 +34,8 @@ jobs:
             .gitignore
             Makefile
             README.md
+            testsuite/
+            util/
           sparse-checkout-cone-mode: false
 
       - name: Configure Git for macOS

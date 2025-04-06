@@ -155,6 +155,7 @@ jobs:
             Makefile
             README.md
             testsuite/
+            util/
           sparse-checkout-cone-mode: false
 
       - name: Install dependencies
@@ -205,6 +206,7 @@ jobs:
             Makefile
             README.md
             testsuite/
+            util/
           sparse-checkout-cone-mode: false
 
       - name: Install dependencies
