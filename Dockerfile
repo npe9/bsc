@@ -29,7 +29,9 @@ RUN mkdir -p /root/.cabal && \
     echo "  key-threshold: 3" >> /root/.cabal/config && \
     echo "remote-repo-cache: /root/.cabal/packages" >> /root/.cabal/config && \
     echo "local-repo: /root/.cabal/local-repo" >> /root/.cabal/config && \
-    echo "package-db: /root/.cabal/store/package.db" >> /root/.cabal/config
+    echo "package-db: /root/.cabal/store/package.db" >> /root/.cabal/config && \
+    cabal update && \
+    cabal install syb
 
 # Test network connectivity and update Cabal package list
 RUN echo "Testing network connectivity..." && \
