@@ -44,7 +44,8 @@ repository hackage.haskell.org\n\
       - f76d08be13e9a61a377a85e2fb63f4c5435d40f8feb3e12eb05905edb8cdea89\n\
       key-threshold: 3\n" > /root/.cabal/config
 
-RUN . /root/.ghcup/env && \
+SHELL ["/bin/bash", "-c"]
+RUN source /root/.ghcup/env && \
     cabal update && \
     cabal install syb
 
@@ -55,4 +56,4 @@ WORKDIR /work
 COPY . .
 
 # Build command
-CMD ["cabal", "build", "bsc"]
+CMD ["bash", "-c", "source /root/.ghcup/env && cabal build bsc"]
