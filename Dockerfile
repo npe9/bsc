@@ -24,12 +24,13 @@ ENV PATH="/root/.ghcup/bin:${PATH}"
 ENV CCACHE_DIR=/ccache
 ENV PATH="/usr/lib/ccache:${PATH}"
 
-# Configure Cabal and download package list
+# Configure Cabal and install dependencies
 RUN mkdir -p /root/.cabal && \
     echo "repository hackage.haskell.org" > /root/.cabal/config && \
     echo "  url: https://hackage.haskell.org/" >> /root/.cabal/config && \
+    echo "  secure: True" >> /root/.cabal/config && \
     cabal update && \
-    cabal install syb
+    cabal v2-install syb --lib
 
 # Set working directory
 WORKDIR /work
