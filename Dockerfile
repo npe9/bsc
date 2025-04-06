@@ -17,9 +17,9 @@ RUN apt-get update && apt-get install -y \
     ccache \
     && rm -rf /var/lib/apt/lists/*
 
-# Create Cabal config directory and initialize config
-RUN mkdir -p /root/.cabal && \
-    echo "repository hackage.haskell.org\n  url: http://hackage.haskell.org/\n  secure: True\n  root-keys: 0a5c7ea47cd1b15f800f7289e56d51643c87d179\n  key-threshold: 3" > /root/.cabal/config
+# Create Cabal config directory and copy config
+RUN mkdir -p /root/.cabal
+COPY cabal.config /root/.cabal/config
 
 # Update Cabal package list and install dependencies
 RUN cabal update && \
