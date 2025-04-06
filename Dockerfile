@@ -1,6 +1,6 @@
 # Dockerfile for building BSC with GHC 9.6.6 and Cabal 3.10.1.0
 # Updated to include build process in workflow
-FROM ubuntu:24.04 as builder
+FROM --platform=$BUILDPLATFORM ubuntu:24.04 as builder
 
 # Install required packages
 RUN apt-get update && apt-get install -y \
@@ -51,7 +51,7 @@ WORKDIR /work
 CMD ["/bin/bash"]
 
 # Final stage
-FROM ubuntu:24.04
+FROM --platform=$TARGETPLATFORM ubuntu:24.04
 
 # Copy only the necessary files from builder
 COPY --from=builder /usr/bin/cabal /usr/bin/
@@ -59,7 +59,9 @@ COPY --from=builder /usr/lib/ghc /usr/lib/ghc
 COPY --from=builder /usr/bin/ghc /usr/bin/
 COPY --from=builder /usr/bin/ghc-pkg /usr/bin/
 COPY --from=builder /root/.cabal /root/.cabal
-COPY --from=builder /usr/lib/aarch64-linux-gnu/libgmp* /usr/lib/aarch64-linux-gnu/
+
+# Copy architecture-specific libraries
+COPY --from=builder /usr/lib/*-linux-gnu/libgmp* /usr/lib/*-linux-gnu/
 
 # Install runtime dependencies
 RUN apt-get update && apt-get install -y \
