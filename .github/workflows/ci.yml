@@ -154,6 +154,7 @@ jobs:
             .gitignore
             Makefile
             README.md
+            testsuite/
           sparse-checkout-cone-mode: false
 
       - name: Install dependencies
@@ -203,6 +204,7 @@ jobs:
             .gitignore
             Makefile
             README.md
+            testsuite/
           sparse-checkout-cone-mode: false
 
       - name: Install dependencies
