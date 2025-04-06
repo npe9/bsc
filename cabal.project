@@ -6,4 +6,4 @@ package bsc
   flags: +stp-stub
   ghc-options: -O2 -Wall -Werror -j2 +RTS -M4500M -A128m -RTS
   optimization: 1
-  split-sections: True 
+  split-sections: true 
