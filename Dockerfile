@@ -21,18 +21,18 @@ RUN apt-get update && apt-get install -y \
 ENV GHC_VERSION=9.6.6
 ENV CABAL_VERSION=3.10.1.0
 
-RUN wget https://downloads.haskell.org/~ghc/${GHC_VERSION}/ghc-${GHC_VERSION}-x86_64-ubuntu22.04-linux.tar.xz && \
-    tar -xf ghc-${GHC_VERSION}-x86_64-ubuntu22.04-linux.tar.xz && \
+RUN wget https://downloads.haskell.org/~ghc/${GHC_VERSION}/ghc-${GHC_VERSION}-x86_64-ubuntu20_04-linux.tar.xz && \
+    tar -xf ghc-${GHC_VERSION}-x86_64-ubuntu20_04-linux.tar.xz && \
     cd ghc-${GHC_VERSION} && \
     ./configure && \
     make install && \
     cd .. && \
-    rm -rf ghc-${GHC_VERSION} ghc-${GHC_VERSION}-x86_64-ubuntu22.04-linux.tar.xz
+    rm -rf ghc-${GHC_VERSION} ghc-${GHC_VERSION}-x86_64-ubuntu20_04-linux.tar.xz
 
-RUN wget https://downloads.haskell.org/~cabal/cabal-install-${CABAL_VERSION}/cabal-install-${CABAL_VERSION}-x86_64-linux-ubuntu22.04.tar.xz && \
-    tar -xf cabal-install-${CABAL_VERSION}-x86_64-linux-ubuntu22.04.tar.xz && \
+RUN wget https://downloads.haskell.org/~cabal/cabal-install-${CABAL_VERSION}/cabal-install-${CABAL_VERSION}-x86_64-linux-ubuntu20.04.tar.xz && \
+    tar -xf cabal-install-${CABAL_VERSION}-x86_64-linux-ubuntu20.04.tar.xz && \
     mv cabal /usr/local/bin/ && \
-    rm cabal-install-${CABAL_VERSION}-x86_64-linux-ubuntu22.04.tar.xz
+    rm cabal-install-${CABAL_VERSION}-x86_64-linux-ubuntu20.04.tar.xz
 
 # Configure ccache
 ENV CCACHE_DIR=/ccache
