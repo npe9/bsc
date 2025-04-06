@@ -18,9 +18,9 @@ RUN apt-get update && apt-get install -y \
     && rm -rf /var/lib/apt/lists/*
 
 # Set up Cabal configuration
-RUN mkdir -p /root/.cabal && \
-    COPY cabal.config /root/.cabal/config && \
-    cabal update && \
+RUN mkdir -p /root/.cabal
+COPY cabal.config /root/.cabal/config
+RUN cabal update && \
     cabal install --lib syb
 
 WORKDIR /work
