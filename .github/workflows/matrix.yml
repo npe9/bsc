@@ -41,9 +41,9 @@ env:
   COMMON_DEPENDENCIES: "aeson async attoparsec base bytestring case-insensitive containers deepseq directory exceptions filepath hashable http-client http-conduit http-types lens mtl network optparse-applicative process random scientific stm streaming text time transformers unix unordered-containers vector wai wai-extra warp"
 
 jobs:
-  # Ubuntu group
-  ubuntu-group:
-    name: Ubuntu Group
+  # Ubuntu jobs
+  ubuntu:
+    name: Ubuntu
     runs-on: ubuntu-latest
     needs: []
     steps:
@@ -55,10 +55,9 @@ jobs:
   # Ubuntu build jobs
   ubuntu-build:
     name: Build (Ubuntu ${{ matrix.os_version }}, GHC ${{ matrix.ghc_version }})
-    needs: ubuntu-group
+    needs: ubuntu
     runs-on: ubuntu-${{ matrix.os_version }}
     timeout-minutes: 60
-    group: ubuntu
     env:
       GHC_VERSION: ${{ matrix.ghc_version }}
       CABAL_BUILD_OPTIONS: "--ghc-options=-j$(nproc) --enable-tests --enable-benchmarks --enable-optimization=2 --disable-library-profiling --enable-executable-stripping --disable-documentation"
@@ -189,7 +188,6 @@ jobs:
     needs: ubuntu-build
     runs-on: ubuntu-${{ matrix.os_version }}
     timeout-minutes: 30
-    group: ubuntu
 
     strategy:
       fail-fast: false
@@ -254,7 +252,6 @@ jobs:
     needs: ubuntu-build
     runs-on: ubuntu-${{ matrix.os_version }}
     timeout-minutes: 20
-    group: ubuntu
     strategy:
       fail-fast: false
       matrix:
@@ -319,7 +316,6 @@ jobs:
     needs: ubuntu-build
     runs-on: ubuntu-${{ matrix.os_version }}
     timeout-minutes: 20
-    group: ubuntu
     strategy:
       fail-fast: false
       matrix:
@@ -377,9 +373,9 @@ jobs:
       run: |
         make -j${{ env.MAKE_JOBS }} test-ghci
 
-  # macOS group
-  macos-group:
-    name: macOS Group
+  # macOS jobs
+  macos:
+    name: macOS
     runs-on: macos-latest
     needs: []
     steps:
@@ -391,10 +387,9 @@ jobs:
   # macOS build jobs
   macos-build:
     name: Build (macOS ${{ matrix.os_version }}, GHC ${{ matrix.ghc_version }})
-    needs: macos-group
+    needs: macos
     runs-on: macos-${{ matrix.os_version }}
     timeout-minutes: 60
-    group: macos
     env:
       GHC_VERSION: ${{ matrix.ghc_version }}
 
@@ -513,7 +508,6 @@ jobs:
     needs: macos-build
     runs-on: macos-${{ matrix.os_version }}
     timeout-minutes: 30
-    group: macos
 
     strategy:
       fail-fast: false
@@ -578,7 +572,6 @@ jobs:
     needs: macos-build
     runs-on: macos-${{ matrix.os_version }}
     timeout-minutes: 20
-    group: macos
     strategy:
       fail-fast: false
       matrix:
@@ -643,7 +636,6 @@ jobs:
     needs: macos-build
     runs-on: macos-${{ matrix.os_version }}
     timeout-minutes: 20
-    group: macos
     strategy:
       fail-fast: false
       matrix:
