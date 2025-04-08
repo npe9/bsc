@@ -34,6 +34,7 @@ env:
   CABAL_JOBS: $(nproc)
   MAKE_JOBS: $(nproc)
   CABAL_TEST_JOBS: $(nproc)
+  COMMON_DEPENDENCIES: "aeson base bytestring containers deepseq directory filepath mtl network process random stm text time transformers unix vector"
 
 jobs:
   # Ubuntu jobs
@@ -81,6 +82,35 @@ jobs:
         restore-keys: |
           ${{ runner.os }}-${{ matrix.ubuntu_version }}-ghc-${{ matrix.ghc }}-
 
+    - name: Cache common dependencies
+      uses: actions/cache@v4
+      id: cache-common-deps
+      with:
+        path: |
+          ~/.cabal/store
+          ~/.cabal/packages
+        key: ${{ runner.os }}-${{ matrix.ubuntu_version }}-common-deps-${{ matrix.ghc }}-${{ hashFiles('**/*.cabal') }}
+        restore-keys: |
+          ${{ runner.os }}-${{ matrix.ubuntu_version }}-common-deps-${{ matrix.ghc }}-
+
+    - name: Setup GHC
+      uses: haskell/actions/setup@v2
+      with:
+        ghc-version: ${{ matrix.ghc }}
+        cabal-version: ${{ env.CABAL_VERSION }}
+        stack-version: ${{ env.STACK_VERSION }}
+        stack-no-global: true
+        stack-setup-ghc: true
+        enable-stack: true
+
+    - name: Pre-download common dependencies
+      if: steps.cache-common-deps.outputs.cache-hit != 'true'
+      run: |
+        cabal update
+        for dep in ${{ env.COMMON_DEPENDENCIES }}; do
+          cabal install --lib $dep --package-env=/tmp/common-deps --overwrite-policy=always
+        done
+
     - name: Cache build artifacts
       uses: actions/cache@v4
       id: cache-build
@@ -123,16 +153,6 @@ jobs:
           libz3-dev \
           zlib1g-dev \
           libghc-split-dev
-
-    - name: Setup GHC
-      uses: haskell/actions/setup@v2
-      with:
-        ghc-version: ${{ matrix.ghc }}
-        cabal-version: ${{ env.CABAL_VERSION }}
-        stack-version: ${{ env.STACK_VERSION }}
-        stack-no-global: true
-        stack-setup-ghc: true
-        enable-stack: true
 
     - name: Cache Haskell dependencies
       uses: actions/cache@v4
