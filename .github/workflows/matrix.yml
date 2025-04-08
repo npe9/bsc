@@ -33,6 +33,7 @@ env:
   CCACHE_COMPRESS: 1
   CCACHE_COMPRESSLEVEL: 6
   CCACHE_HARDLINK: 1
+  CCACHE_SLOPPINESS: file_macro,time_macros,include_file_mtime,include_file_ctime,file_stat_matches,file_stat_matches_ctime,pch_defines,modules,ivars
   GHCJOBS: $(nproc)
   CABAL_JOBS: $(nproc)
   MAKE_JOBS: $(nproc)
@@ -94,7 +95,8 @@ jobs:
           ~/.stack
           dist-newstyle
           /opt/cabal-store
-        key: ${{ runner.os }}-${{ matrix.ubuntu_version }}-deps-${{ matrix.ghc }}-${{ hashFiles('**/*.cabal') }}-${{ hashFiles('cabal.project') }}-${{ hashFiles('**/*.hs') }}
+          /opt/stack
+        key: ${{ runner.os }}-${{ matrix.ubuntu_version }}-deps-${{ matrix.ghc }}-${{ hashFiles('**/*.cabal') }}-${{ hashFiles('cabal.project') }}-${{ hashFiles('**/*.hs') }}-${{ hashFiles('**/*.c', '**/*.cpp', '**/*.h') }}
         restore-keys: |
           ${{ runner.os }}-${{ matrix.ubuntu_version }}-deps-${{ matrix.ghc }}-
           ${{ runner.os }}-${{ matrix.ubuntu_version }}-deps-
@@ -108,6 +110,17 @@ jobs:
           ${{ runner.os }}-${{ matrix.ubuntu_version }}-ccache-${{ matrix.ghc }}-
           ${{ runner.os }}-${{ matrix.ubuntu_version }}-ccache-
 
+    - name: Cache package indices
+      uses: actions/cache@v4
+      with:
+        path: |
+          ~/.cabal/packages
+          ~/.stack/indices
+        key: ${{ runner.os }}-${{ matrix.ubuntu_version }}-indices-${{ matrix.ghc }}-${{ hashFiles('**/*.cabal') }}
+        restore-keys: |
+          ${{ runner.os }}-${{ matrix.ubuntu_version }}-indices-${{ matrix.ghc }}-
+          ${{ runner.os }}-${{ matrix.ubuntu_version }}-indices-
+
     - name: Run in Docker container
       run: |
         docker run --rm \
@@ -120,6 +133,7 @@ jobs:
           -e CCACHE_COMPRESS=1 \
           -e CCACHE_COMPRESSLEVEL=6 \
           -e CCACHE_HARDLINK=1 \
+          -e CCACHE_SLOPPINESS="${{ env.CCACHE_SLOPPINESS }}" \
           -e GHCJOBS=${{ env.GHCJOBS }} \
           -e CABAL_JOBS=${{ env.CABAL_JOBS }} \
           -e MAKE_JOBS=${{ env.MAKE_JOBS }} \

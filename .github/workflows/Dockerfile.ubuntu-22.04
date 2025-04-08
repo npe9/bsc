@@ -7,6 +7,9 @@ ENV LANG=C.UTF-8
 ENV LC_ALL=C.UTF-8
 ENV GHCUP_INSTALL_BASE_PREFIX=/opt
 ENV PATH="/opt/.ghcup/bin:$PATH"
+ENV CABAL_DIR=/opt/cabal-store
+ENV CABAL_CONFIG=/opt/cabal-store/config
+ENV STACK_ROOT=/opt/stack
 
 # Install system dependencies
 RUN apt-get update && apt-get install -y \
@@ -39,9 +42,25 @@ RUN ghcup install ghc 9.4.8 && \
 RUN ghcup install cabal 3.10.2.1 && \
     ghcup install stack 2.13.1
 
-# Pre-download common dependencies
+# Configure Cabal
 RUN mkdir -p /opt/cabal-store && \
-    cabal update && \
+    echo "repository hackage.haskell.org" > /opt/cabal-store/config && \
+    echo "  url: https://hackage.haskell.org/" >> /opt/cabal-store/config && \
+    echo "  secure: True" >> /opt/cabal-store/config && \
+    echo "  root-keys:" >> /opt/cabal-store/config && \
+    echo "  -- 0a5c7ea47cd1b15f01f5f51a33adda7e655bc0f0b0615baa8e5f00e9c5467d24" >> /opt/cabal-store/config && \
+    echo "  -- 1ea9ba32c526d1cc91ab5e5bd364ec5e9e8cb67179a471872f6e26f0ae773d42" >> /opt/cabal-store/config && \
+    echo "  -- 280b10153a522681163658cb49f632cde3f38d768b736ddbc901d99a1a772833" >> /opt/cabal-store/config && \
+    echo "  -- 2a96b1889dc221c17296fcc2bb34b908ca9734376f0f361660200935916ef201" >> /opt/cabal-store/config && \
+    echo "  -- 2c6c3627bd6c982990239487f1abd02e08a02e6cf16edb105a8012d444d870c3" >> /opt/cabal-store/config && \
+    echo "  -- 51f0161b906011b52c6613376b1ae937670da69322113a246a09f807c62fbf1e" >> /opt/cabal-store/config && \
+    echo "  -- 772e9f4c7db33d251d5c6e357199c819e569d130857dc225549b40845ff0890d" >> /opt/cabal-store/config && \
+    echo "  -- aa315286e6ad281ad61182235533c41e806e5a787e0b6d1e7eef3f09d137d2e9" >> /opt/cabal-store/config && \
+    echo "  -- fe331502606802feac15e514d9b9ea83fee8b6ffef71335479a2e68d84adc6b0" >> /opt/cabal-store/config && \
+    echo "  -- ff8895b918a99658c7fda6c097f8d5cb0392f4f5e66b07418509e6c3be3582f2" >> /opt/cabal-store/config
+
+# Pre-download common dependencies
+RUN cabal update && \
     cabal install --lib --package-env=/opt/cabal-store \
     aeson async attoparsec base bytestring case-insensitive containers deepseq directory exceptions filepath hashable http-client http-conduit http-types lens mtl network optparse-applicative process random scientific stm streaming text time transformers unix unordered-containers vector wai wai-extra warp
 
@@ -51,6 +70,7 @@ FROM ubuntu:22.04
 # Copy GHC and tools from builder
 COPY --from=ghc-builder /opt/.ghcup /opt/.ghcup
 COPY --from=ghc-builder /opt/cabal-store /opt/cabal-store
+COPY --from=ghc-builder /opt/stack /opt/stack
 COPY --from=ghc-builder /usr/lib/x86_64-linux-gnu/libffi* /usr/lib/x86_64-linux-gnu/
 COPY --from=ghc-builder /usr/lib/x86_64-linux-gnu/libgmp* /usr/lib/x86_64-linux-gnu/
 COPY --from=ghc-builder /usr/lib/x86_64-linux-gnu/libncurses* /usr/lib/x86_64-linux-gnu/
@@ -74,12 +94,16 @@ ENV LANG=C.UTF-8
 ENV LC_ALL=C.UTF-8
 ENV GHCUP_INSTALL_BASE_PREFIX=/opt
 ENV CABAL_DIR=/opt/cabal-store
+ENV CABAL_CONFIG=/opt/cabal-store/config
+ENV STACK_ROOT=/opt/stack
 ENV CCACHE_DIR=/tmp/ccache
 ENV CCACHE_MAXSIZE=500M
 ENV CCACHE_COMPRESS=1
 ENV CCACHE_COMPRESSLEVEL=6
 ENV CCACHE_HARDLINK=1
 ENV CCACHE_LOGFILE=/tmp/ccache.log
+ENV CCACHE_SLOPPINESS=file_macro,time_macros,include_file_mtime,include_file_ctime,file_stat_matches,file_stat_matches_ctime,pch_defines,modules,ivars
+ENV CCACHE_BASEDIR=/work
 
 # Set up ccache
 RUN mkdir -p /tmp/ccache && \
