@@ -30,6 +30,9 @@ env:
   STACK_VERSION: "2.13.1"
   CCACHE_DIR: /tmp/ccache
   CCACHE_MAXSIZE: 500M
+  CCACHE_COMPRESS: 1
+  CCACHE_COMPRESSLEVEL: 6
+  CCACHE_HARDLINK: 1
   GHCJOBS: $(nproc)
   CABAL_JOBS: $(nproc)
   MAKE_JOBS: $(nproc)
@@ -90,9 +93,20 @@ jobs:
           ~/.cabal/store
           ~/.stack
           dist-newstyle
-        key: ${{ runner.os }}-${{ matrix.ubuntu_version }}-deps-${{ matrix.ghc }}-${{ hashFiles('**/*.cabal') }}-${{ hashFiles('cabal.project') }}
+          /opt/cabal-store
+        key: ${{ runner.os }}-${{ matrix.ubuntu_version }}-deps-${{ matrix.ghc }}-${{ hashFiles('**/*.cabal') }}-${{ hashFiles('cabal.project') }}-${{ hashFiles('**/*.hs') }}
         restore-keys: |
           ${{ runner.os }}-${{ matrix.ubuntu_version }}-deps-${{ matrix.ghc }}-
+          ${{ runner.os }}-${{ matrix.ubuntu_version }}-deps-
+
+    - name: Cache ccache
+      uses: actions/cache@v4
+      with:
+        path: /tmp/ccache
+        key: ${{ runner.os }}-${{ matrix.ubuntu_version }}-ccache-${{ matrix.ghc }}-${{ hashFiles('**/*.c', '**/*.cpp', '**/*.h') }}
+        restore-keys: |
+          ${{ runner.os }}-${{ matrix.ubuntu_version }}-ccache-${{ matrix.ghc }}-
+          ${{ runner.os }}-${{ matrix.ubuntu_version }}-ccache-
 
     - name: Run in Docker container
       run: |
@@ -103,6 +117,9 @@ jobs:
           -e CABAL_BUILD_OPTIONS="${{ env.CABAL_BUILD_OPTIONS }}" \
           -e CCACHE_DIR=/tmp/ccache \
           -e CCACHE_MAXSIZE=500M \
+          -e CCACHE_COMPRESS=1 \
+          -e CCACHE_COMPRESSLEVEL=6 \
+          -e CCACHE_HARDLINK=1 \
           -e GHCJOBS=${{ env.GHCJOBS }} \
           -e CABAL_JOBS=${{ env.CABAL_JOBS }} \
           -e MAKE_JOBS=${{ env.MAKE_JOBS }} \

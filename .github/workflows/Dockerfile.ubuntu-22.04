@@ -5,6 +5,8 @@ FROM ubuntu:22.04 as ghc-builder
 ENV DEBIAN_FRONTEND=noninteractive
 ENV LANG=C.UTF-8
 ENV LC_ALL=C.UTF-8
+ENV GHCUP_INSTALL_BASE_PREFIX=/opt
+ENV PATH="/opt/.ghcup/bin:$PATH"
 
 # Install system dependencies
 RUN apt-get update && apt-get install -y \
@@ -25,25 +27,30 @@ RUN apt-get update && apt-get install -y \
 # Install GHCup
 RUN curl --proto '=https' --tlsv1.2 -sSf https://get-ghcup.haskell.org | sh
 
-# Set up GHCup environment
-ENV PATH="/root/.ghcup/bin:$PATH"
-
-# Install common GHC versions
+# Install common GHC versions in parallel
 RUN ghcup install ghc 9.4.8 && \
     ghcup install ghc 9.6.6 && \
     ghcup install ghc 9.8.4 && \
     ghcup install ghc 9.10.1 && \
-    ghcup install ghc 9.12.1
+    ghcup install ghc 9.12.1 & \
+    wait
 
 # Install Cabal and Stack
 RUN ghcup install cabal 3.10.2.1 && \
     ghcup install stack 2.13.1
 
+# Pre-download common dependencies
+RUN mkdir -p /opt/cabal-store && \
+    cabal update && \
+    cabal install --lib --package-env=/opt/cabal-store \
+    aeson async attoparsec base bytestring case-insensitive containers deepseq directory exceptions filepath hashable http-client http-conduit http-types lens mtl network optparse-applicative process random scientific stm streaming text time transformers unix unordered-containers vector wai wai-extra warp
+
 # Final stage
 FROM ubuntu:22.04
 
 # Copy GHC and tools from builder
-COPY --from=ghc-builder /root/.ghcup /root/.ghcup
+COPY --from=ghc-builder /opt/.ghcup /opt/.ghcup
+COPY --from=ghc-builder /opt/cabal-store /opt/cabal-store
 COPY --from=ghc-builder /usr/lib/x86_64-linux-gnu/libffi* /usr/lib/x86_64-linux-gnu/
 COPY --from=ghc-builder /usr/lib/x86_64-linux-gnu/libgmp* /usr/lib/x86_64-linux-gnu/
 COPY --from=ghc-builder /usr/lib/x86_64-linux-gnu/libncurses* /usr/lib/x86_64-linux-gnu/
@@ -57,17 +64,25 @@ RUN apt-get update && apt-get install -y \
     libncurses5 \
     libtinfo5 \
     zlib1g-dev \
+    ccache \
     && rm -rf /var/lib/apt/lists/*
 
 # Set up environment
-ENV PATH="/root/.ghcup/bin:$PATH"
+ENV PATH="/opt/.ghcup/bin:$PATH"
 ENV DEBIAN_FRONTEND=noninteractive
 ENV LANG=C.UTF-8
 ENV LC_ALL=C.UTF-8
+ENV GHCUP_INSTALL_BASE_PREFIX=/opt
+ENV CABAL_DIR=/opt/cabal-store
+ENV CCACHE_DIR=/tmp/ccache
+ENV CCACHE_MAXSIZE=500M
+ENV CCACHE_COMPRESS=1
+ENV CCACHE_COMPRESSLEVEL=6
+ENV CCACHE_HARDLINK=1
+ENV CCACHE_LOGFILE=/tmp/ccache.log
 
 # Set up ccache
-RUN apt-get update && apt-get install -y ccache && \
-    mkdir -p /tmp/ccache && \
+RUN mkdir -p /tmp/ccache && \
     chmod 777 /tmp/ccache
 
 # Set up working directory
