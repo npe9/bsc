@@ -34,7 +34,7 @@ env:
   CABAL_JOBS: $(nproc)
   MAKE_JOBS: $(nproc)
   CABAL_TEST_JOBS: $(nproc)
-  COMMON_DEPENDENCIES: "aeson base bytestring containers deepseq directory filepath mtl network process random stm text time transformers unix vector"
+  COMMON_DEPENDENCIES: "aeson async attoparsec base bytestring case-insensitive containers deepseq directory exceptions filepath hashable http-client http-conduit http-types lens mtl network optparse-applicative process random scientific stm streaming text time transformers unix unordered-containers vector wai wai-extra warp"
 
 jobs:
   # Ubuntu jobs
