@@ -1,0 +1,73 @@
+FROM ubuntu:22.04 as build
+
+# Set timezone to avoid prompts
+ENV TZ=UTC
+RUN ln -snf /usr/share/zoneinfo/$TZ /etc/localtime && echo $TZ > /etc/timezone
+
+# Copy source code and install dependencies
+COPY . /build/
+WORKDIR /build
+
+# Install build dependencies
+RUN apt-get update && apt-get install -y \
+    gcc \
+    g++ \
+    make \
+    git \
+    ghc \
+    gperf \
+    libghc-text-dev \
+    libghc-regex-compat-dev \
+    libghc-syb-dev \
+    libghc-old-time-dev \
+    libghc-split-dev \
+    tcl \
+    itk3-dev \
+    autoconf \
+    flex \
+    bison \
+    && rm -rf /var/lib/apt/lists/*
+
+# Initialize git submodules
+RUN git submodule update --init --recursive
+
+# Set macOS-specific environment variables
+ENV OSTYPE=Darwin
+ENV MACHTYPE=x86_64
+ENV CFLAGS="-m64"
+ENV CXXFLAGS="-m64"
+
+# Build the project
+RUN make -C /build -j$(nproc)
+
+# Install binaries
+RUN make -C /build install-src
+
+# Run smoke tests
+RUN make -C /build check-smoke
+
+# Create final image
+FROM ubuntu:22.04
+
+# Install runtime dependencies
+RUN apt-get update && DEBIAN_FRONTEND=noninteractive apt-get install -y \
+    build-essential \
+    ghc \
+    git \
+    iverilog \
+    make \
+    pkg-config \
+    python3 \
+    tcl \
+    itk3 \
+    && rm -rf /var/lib/apt/lists/*
+
+# Copy built binaries
+COPY --from=build /usr/local /usr/local
+
+# Set environment variables
+ENV PATH=/usr/local/bin:$PATH
+ENV OSTYPE=Darwin
+ENV MACHTYPE=x86_64
+
+WORKDIR /work 

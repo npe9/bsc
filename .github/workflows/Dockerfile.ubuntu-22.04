@@ -1,0 +1,52 @@
+FROM ubuntu:22.04
+
+# Set environment variables
+ENV DEBIAN_FRONTEND=noninteractive
+ENV LANG=C.UTF-8
+ENV LC_ALL=C.UTF-8
+
+# Install system dependencies
+RUN apt-get update && apt-get install -y \
+    build-essential \
+    curl \
+    libffi-dev \
+    libffi8ubuntu1 \
+    libgmp-dev \
+    libgmp10 \
+    libncurses-dev \
+    libncurses5 \
+    libtinfo5 \
+    libz3-dev \
+    zlib1g-dev \
+    libghc-split-dev \
+    && rm -rf /var/lib/apt/lists/*
+
+# Install GHCup
+RUN curl --proto '=https' --tlsv1.2 -sSf https://get-ghcup.haskell.org | sh
+
+# Set up GHCup environment
+ENV PATH="/root/.ghcup/bin:$PATH"
+
+# Install common GHC versions
+RUN ghcup install ghc 9.4.8 && \
+    ghcup install ghc 9.6.6 && \
+    ghcup install ghc 9.8.4 && \
+    ghcup install ghc 9.10.1 && \
+    ghcup install ghc 9.12.1
+
+# Install Cabal
+RUN ghcup install cabal 3.10.2.1
+
+# Install Stack
+RUN ghcup install stack 2.13.1
+
+# Set up ccache
+RUN apt-get update && apt-get install -y ccache && \
+    mkdir -p /tmp/ccache && \
+    chmod 777 /tmp/ccache
+
+# Set up working directory
+WORKDIR /work
+
+# Set default command
+CMD ["bash"] 

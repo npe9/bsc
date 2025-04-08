@@ -1,0 +1,41 @@
+FROM ghcr.io/cirruslabs/macos-ventura-base:latest
+
+# Install Homebrew
+RUN /bin/bash -c "$(curl -fsSL https://raw.githubusercontent.com/Homebrew/install/HEAD/install.sh)"
+ENV PATH="/opt/homebrew/bin:$PATH"
+
+# Install system dependencies
+RUN brew update && brew install \
+    gmp \
+    z3 \
+    && brew cleanup
+
+# Install GHCup
+RUN curl --proto '=https' --tlsv1.2 -sSf https://get-ghcup.haskell.org | sh
+
+# Set up GHCup environment
+ENV PATH="/root/.ghcup/bin:$PATH"
+
+# Install common GHC versions
+RUN ghcup install ghc 9.4.8 && \
+    ghcup install ghc 9.6.6 && \
+    ghcup install ghc 9.8.4 && \
+    ghcup install ghc 9.10.1 && \
+    ghcup install ghc 9.12.1
+
+# Install Cabal
+RUN ghcup install cabal 3.10.2.1
+
+# Install Stack
+RUN ghcup install stack 2.13.1
+
+# Set up ccache
+RUN brew install ccache && \
+    mkdir -p /tmp/ccache && \
+    chmod 777 /tmp/ccache
+
+# Set up working directory
+WORKDIR /work
+
+# Set default command
+CMD ["bash"] 
