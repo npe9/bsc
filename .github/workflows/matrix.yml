@@ -33,6 +33,7 @@ env:
   GHCJOBS: $(nproc)
   CABAL_JOBS: $(nproc)
   MAKE_JOBS: $(nproc)
+  CABAL_TEST_JOBS: $(nproc)
 
 jobs:
   # Ubuntu jobs
@@ -42,6 +43,7 @@ jobs:
     timeout-minutes: 60
     env:
       GHC_VERSION: ${{ matrix.ghc }}
+      CABAL_BUILD_OPTIONS: "--ghc-options=-j$(nproc) --enable-tests --enable-benchmarks --enable-optimization=2"
     strategy:
       fail-fast: false
       matrix:
@@ -75,9 +77,9 @@ jobs:
           ~/.ghcup
           ~/.cabal/store
           ~/.cabal/packages
-        key: ubuntu-${{ matrix.ubuntu_version }}-ghc-${{ matrix.ghc }}-${{ hashFiles('**/*.cabal') }}
+        key: ${{ runner.os }}-${{ matrix.ubuntu_version }}-ghc-${{ matrix.ghc }}-${{ hashFiles('**/*.cabal') }}-${{ hashFiles('cabal.project') }}
         restore-keys: |
-          ubuntu-${{ matrix.ubuntu_version }}-ghc-${{ matrix.ghc }}-
+          ${{ runner.os }}-${{ matrix.ubuntu_version }}-ghc-${{ matrix.ghc }}-
 
     - name: Cache build artifacts
       uses: actions/cache@v4
@@ -86,23 +88,23 @@ jobs:
         path: |
           dist-newstyle
           .stack-work
-        key: ubuntu-${{ matrix.ubuntu_version }}-build-${{ matrix.ghc }}-${{ hashFiles('**/*.hs', '**/*.cabal', '**/*.hsc', '**/*.h', '**/*.c', '**/*.cpp') }}
+        key: ${{ runner.os }}-${{ matrix.ubuntu_version }}-build-${{ matrix.ghc }}-${{ hashFiles('**/*.hs', '**/*.cabal', '**/*.hsc', '**/*.h', '**/*.c', '**/*.cpp', 'cabal.project') }}
         restore-keys: |
-          ubuntu-${{ matrix.ubuntu_version }}-build-${{ matrix.ghc }}-
+          ${{ runner.os }}-${{ matrix.ubuntu_version }}-build-${{ matrix.ghc }}-
 
     - name: Cache ccache
       uses: actions/cache@v4
       id: cache-ccache
       with:
         path: /tmp/ccache
-        key: ubuntu-${{ matrix.ubuntu_version }}-ccache-${{ matrix.ghc }}-${{ hashFiles('**/*.c', '**/*.cpp', '**/*.h') }}
+        key: ${{ runner.os }}-${{ matrix.ubuntu_version }}-ccache-${{ matrix.ghc }}-${{ hashFiles('**/*.c', '**/*.cpp', '**/*.h') }}
         restore-keys: |
-          ubuntu-${{ matrix.ubuntu_version }}-ccache-${{ matrix.ghc }}-
+          ${{ runner.os }}-${{ matrix.ubuntu_version }}-ccache-${{ matrix.ghc }}-
 
     - name: Setup ccache
       uses: hendrikmuhs/ccache-action@v1.2
       with:
-        key: ubuntu-${{ matrix.ubuntu_version }}-ccache-${{ matrix.ghc }}
+        key: ${{ runner.os }}-${{ matrix.ubuntu_version }}-ccache-${{ matrix.ghc }}
         max-size: 500M
 
     - name: Install system dependencies
@@ -140,18 +142,18 @@ jobs:
           ~/.cabal/store
           ~/.stack
           dist-newstyle
-        key: ubuntu-${{ matrix.ubuntu_version }}-deps-${{ matrix.ghc }}-${{ hashFiles('**/*.cabal') }}
+        key: ${{ runner.os }}-${{ matrix.ubuntu_version }}-deps-${{ matrix.ghc }}-${{ hashFiles('**/*.cabal', 'cabal.project') }}
         restore-keys: |
-          ubuntu-${{ matrix.ubuntu_version }}-deps-${{ matrix.ghc }}-
+          ${{ runner.os }}-${{ matrix.ubuntu_version }}-deps-${{ matrix.ghc }}-
 
     - name: Install Haskell dependencies
       run: |
         cabal update
-        cabal build --only-dependencies -j${{ env.CABAL_JOBS }}
+        cabal build --only-dependencies -j${{ env.CABAL_JOBS }} ${{ env.CABAL_BUILD_OPTIONS }}
 
     - name: Build
       run: |
-        make -j${{ env.MAKE_JOBS }} GHCJOBS=${{ env.GHCJOBS }} CABAL_JOBS=${{ env.CABAL_JOBS }}
+        make -j${{ env.MAKE_JOBS }} GHCJOBS=${{ env.GHCJOBS }} CABAL_JOBS=${{ env.CABAL_JOBS }} CABAL_BUILD_OPTIONS="${{ env.CABAL_BUILD_OPTIONS }}"
 
     - name: Upload build artifacts
       uses: actions/upload-artifact@v4
@@ -208,9 +210,9 @@ jobs:
           ~/.ghcup
           ~/.cabal/store
           ~/.cabal/packages
-        key: ubuntu-${{ matrix.ubuntu_version }}-ghc-${{ matrix.ghc }}-${{ hashFiles('**/*.cabal') }}
+        key: ${{ runner.os }}-${{ matrix.ubuntu_version }}-ghc-${{ matrix.ghc }}-${{ hashFiles('**/*.cabal') }}-${{ hashFiles('cabal.project') }}
         restore-keys: |
-          ubuntu-${{ matrix.ubuntu_version }}-ghc-${{ matrix.ghc }}-
+          ${{ runner.os }}-${{ matrix.ubuntu_version }}-ghc-${{ matrix.ghc }}-
 
     - name: Setup GHC
       uses: haskell/actions/setup@v2
@@ -224,7 +226,7 @@ jobs:
 
     - name: Run smoke tests
       run: |
-        make -j${{ env.MAKE_JOBS }} smoke-tests
+        cabal test -j${{ env.CABAL_TEST_JOBS }} --test-show-details=direct --test-option=--num-threads=${{ env.CABAL_TEST_JOBS }}
 
   # HLS jobs for Ubuntu
   ubuntu-hls:
@@ -271,9 +273,9 @@ jobs:
           ~/.ghcup
           ~/.cabal/store
           ~/.cabal/packages
-        key: ubuntu-${{ matrix.ubuntu_version }}-ghc-${{ matrix.ghc }}-${{ hashFiles('**/*.cabal') }}
+        key: ${{ runner.os }}-${{ matrix.ubuntu_version }}-ghc-${{ matrix.ghc }}-${{ hashFiles('**/*.cabal') }}-${{ hashFiles('cabal.project') }}
         restore-keys: |
-          ubuntu-${{ matrix.ubuntu_version }}-ghc-${{ matrix.ghc }}-
+          ${{ runner.os }}-${{ matrix.ubuntu_version }}-ghc-${{ matrix.ghc }}-
 
     - name: Setup GHC
       uses: haskell/actions/setup@v2
@@ -335,9 +337,9 @@ jobs:
           ~/.ghcup
           ~/.cabal/store
           ~/.cabal/packages
-        key: ubuntu-${{ matrix.ubuntu_version }}-ghc-${{ matrix.ghc }}-${{ hashFiles('**/*.cabal') }}
+        key: ${{ runner.os }}-${{ matrix.ubuntu_version }}-ghc-${{ matrix.ghc }}-${{ hashFiles('**/*.cabal') }}-${{ hashFiles('cabal.project') }}
         restore-keys: |
-          ubuntu-${{ matrix.ubuntu_version }}-ghc-${{ matrix.ghc }}-
+          ${{ runner.os }}-${{ matrix.ubuntu_version }}-ghc-${{ matrix.ghc }}-
 
     - name: Setup GHC
       uses: haskell/actions/setup@v2
@@ -657,4 +659,19 @@ jobs:
 
     - name: Check GHCI load
       run: |
-        make -j${{ env.MAKE_JOBS }} test-ghci 
+        make -j${{ env.MAKE_JOBS }} test-ghci
+
+    - name: Create cabal.project
+      run: |
+        cat > cabal.project << EOF
+        packages: .
+        tests: True
+        benchmarks: True
+        optimization: 2
+        documentation: False
+        tests-show-details: direct
+        tests-show-log: True
+        tests-keep-tix: True
+        tests-keep-going: True
+        tests-jobs: ${{ env.CABAL_TEST_JOBS }}
+        EOF 
