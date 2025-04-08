@@ -3,8 +3,26 @@ name: Matrix Build and Test
 on:
   push:
     branches: [ main ]
+    paths:
+      - '**.hs'
+      - '**.cabal'
+      - '**.c'
+      - '**.cpp'
+      - '**.h'
+      - '**.hsc'
+      - 'Makefile'
+      - '.github/workflows/**'
   pull_request:
     branches: [ main ]
+    paths:
+      - '**.hs'
+      - '**.cabal'
+      - '**.c'
+      - '**.cpp'
+      - '**.h'
+      - '**.hsc'
+      - 'Makefile'
+      - '.github/workflows/**'
   workflow_dispatch:
 
 env:
@@ -25,6 +43,7 @@ jobs:
     env:
       GHC_VERSION: ${{ matrix.ghc }}
     strategy:
+      fail-fast: false
       matrix:
         ubuntu_version: [20.04, 22.04, 24.04]
         ghc: [9.6.6]
@@ -57,6 +76,8 @@ jobs:
           ~/.cabal/store
           ~/.cabal/packages
         key: ubuntu-${{ matrix.ubuntu_version }}-ghc-${{ matrix.ghc }}-${{ hashFiles('**/*.cabal') }}
+        restore-keys: |
+          ubuntu-${{ matrix.ubuntu_version }}-ghc-${{ matrix.ghc }}-
 
     - name: Cache build artifacts
       uses: actions/cache@v4
@@ -66,6 +87,8 @@ jobs:
           dist-newstyle
           .stack-work
         key: ubuntu-${{ matrix.ubuntu_version }}-build-${{ matrix.ghc }}-${{ hashFiles('**/*.hs', '**/*.cabal', '**/*.hsc', '**/*.h', '**/*.c', '**/*.cpp') }}
+        restore-keys: |
+          ubuntu-${{ matrix.ubuntu_version }}-build-${{ matrix.ghc }}-
 
     - name: Cache ccache
       uses: actions/cache@v4
@@ -73,6 +96,8 @@ jobs:
       with:
         path: /tmp/ccache
         key: ubuntu-${{ matrix.ubuntu_version }}-ccache-${{ matrix.ghc }}-${{ hashFiles('**/*.c', '**/*.cpp', '**/*.h') }}
+        restore-keys: |
+          ubuntu-${{ matrix.ubuntu_version }}-ccache-${{ matrix.ghc }}-
 
     - name: Setup ccache
       uses: hendrikmuhs/ccache-action@v1.2
@@ -116,6 +141,8 @@ jobs:
           ~/.stack
           dist-newstyle
         key: ubuntu-${{ matrix.ubuntu_version }}-deps-${{ matrix.ghc }}-${{ hashFiles('**/*.cabal') }}
+        restore-keys: |
+          ubuntu-${{ matrix.ubuntu_version }}-deps-${{ matrix.ghc }}-
 
     - name: Install Haskell dependencies
       run: |
@@ -134,6 +161,197 @@ jobs:
           dist-newstyle
           .stack-work
         retention-days: 1
+        compression-level: 9
+
+  # Test jobs for Ubuntu
+  ubuntu-test:
+    name: Test (Ubuntu ${{ matrix.ubuntu_version }}, GHC ${{ matrix.ghc }})
+    needs: ubuntu-build
+    runs-on: ubuntu-${{ matrix.ubuntu_version }}
+    timeout-minutes: 30
+    strategy:
+      fail-fast: false
+      matrix:
+        ubuntu_version: [20.04, 22.04, 24.04]
+        ghc: [9.6.6]
+        build_type: [release]
+        include:
+          - ubuntu_version: 22.04
+            ghc: 9.4.8
+            build_type: test
+          - ubuntu_version: 22.04
+            ghc: 9.8.4
+            build_type: test
+          - ubuntu_version: 22.04
+            ghc: 9.10.1
+            build_type: test
+          - ubuntu_version: 22.04
+            ghc: 9.12.1
+            build_type: test
+
+    steps:
+    - uses: actions/checkout@v4
+      with:
+        fetch-depth: 0
+
+    - name: Download build artifacts
+      uses: actions/download-artifact@v4
+      with:
+        name: build-ubuntu-${{ matrix.ubuntu_version }}-${{ matrix.ghc }}-${{ matrix.build_type }}
+        path: .
+
+    - name: Cache GHC
+      uses: actions/cache@v4
+      id: cache-ghc
+      with:
+        path: |
+          ~/.ghcup
+          ~/.cabal/store
+          ~/.cabal/packages
+        key: ubuntu-${{ matrix.ubuntu_version }}-ghc-${{ matrix.ghc }}-${{ hashFiles('**/*.cabal') }}
+        restore-keys: |
+          ubuntu-${{ matrix.ubuntu_version }}-ghc-${{ matrix.ghc }}-
+
+    - name: Setup GHC
+      uses: haskell/actions/setup@v2
+      with:
+        ghc-version: ${{ matrix.ghc }}
+        cabal-version: ${{ env.CABAL_VERSION }}
+        stack-version: ${{ env.STACK_VERSION }}
+        stack-no-global: true
+        stack-setup-ghc: true
+        enable-stack: true
+
+    - name: Run smoke tests
+      run: |
+        make -j${{ env.MAKE_JOBS }} smoke-tests
+
+  # HLS jobs for Ubuntu
+  ubuntu-hls:
+    name: HLS (Ubuntu ${{ matrix.ubuntu_version }}, GHC ${{ matrix.ghc }})
+    needs: ubuntu-build
+    runs-on: ubuntu-${{ matrix.ubuntu_version }}
+    timeout-minutes: 20
+    strategy:
+      fail-fast: false
+      matrix:
+        ubuntu_version: [20.04, 22.04, 24.04]
+        ghc: [9.6.6]
+        build_type: [release]
+        include:
+          - ubuntu_version: 22.04
+            ghc: 9.4.8
+            build_type: test
+          - ubuntu_version: 22.04
+            ghc: 9.8.4
+            build_type: test
+          - ubuntu_version: 22.04
+            ghc: 9.10.1
+            build_type: test
+          - ubuntu_version: 22.04
+            ghc: 9.12.1
+            build_type: test
+
+    steps:
+    - uses: actions/checkout@v4
+      with:
+        fetch-depth: 0
+
+    - name: Download build artifacts
+      uses: actions/download-artifact@v4
+      with:
+        name: build-ubuntu-${{ matrix.ubuntu_version }}-${{ matrix.ghc }}-${{ matrix.build_type }}
+        path: .
+
+    - name: Cache GHC
+      uses: actions/cache@v4
+      id: cache-ghc
+      with:
+        path: |
+          ~/.ghcup
+          ~/.cabal/store
+          ~/.cabal/packages
+        key: ubuntu-${{ matrix.ubuntu_version }}-ghc-${{ matrix.ghc }}-${{ hashFiles('**/*.cabal') }}
+        restore-keys: |
+          ubuntu-${{ matrix.ubuntu_version }}-ghc-${{ matrix.ghc }}-
+
+    - name: Setup GHC
+      uses: haskell/actions/setup@v2
+      with:
+        ghc-version: ${{ matrix.ghc }}
+        cabal-version: ${{ env.CABAL_VERSION }}
+        stack-version: ${{ env.STACK_VERSION }}
+        stack-no-global: true
+        stack-setup-ghc: true
+        enable-stack: true
+
+    - name: Test HLS
+      if: matrix.ghc != '9.12.1'
+      run: |
+        make -j${{ env.MAKE_JOBS }} test-hls
+
+  # GHCI jobs for Ubuntu
+  ubuntu-ghci:
+    name: GHCI (Ubuntu ${{ matrix.ubuntu_version }}, GHC ${{ matrix.ghc }})
+    needs: ubuntu-build
+    runs-on: ubuntu-${{ matrix.ubuntu_version }}
+    timeout-minutes: 20
+    strategy:
+      fail-fast: false
+      matrix:
+        ubuntu_version: [20.04, 22.04, 24.04]
+        ghc: [9.6.6]
+        build_type: [release]
+        include:
+          - ubuntu_version: 22.04
+            ghc: 9.4.8
+            build_type: test
+          - ubuntu_version: 22.04
+            ghc: 9.8.4
+            build_type: test
+          - ubuntu_version: 22.04
+            ghc: 9.10.1
+            build_type: test
+          - ubuntu_version: 22.04
+            ghc: 9.12.1
+            build_type: test
+
+    steps:
+    - uses: actions/checkout@v4
+      with:
+        fetch-depth: 0
+
+    - name: Download build artifacts
+      uses: actions/download-artifact@v4
+      with:
+        name: build-ubuntu-${{ matrix.ubuntu_version }}-${{ matrix.ghc }}-${{ matrix.build_type }}
+        path: .
+
+    - name: Cache GHC
+      uses: actions/cache@v4
+      id: cache-ghc
+      with:
+        path: |
+          ~/.ghcup
+          ~/.cabal/store
+          ~/.cabal/packages
+        key: ubuntu-${{ matrix.ubuntu_version }}-ghc-${{ matrix.ghc }}-${{ hashFiles('**/*.cabal') }}
+        restore-keys: |
+          ubuntu-${{ matrix.ubuntu_version }}-ghc-${{ matrix.ghc }}-
+
+    - name: Setup GHC
+      uses: haskell/actions/setup@v2
+      with:
+        ghc-version: ${{ matrix.ghc }}
+        cabal-version: ${{ env.CABAL_VERSION }}
+        stack-version: ${{ env.STACK_VERSION }}
+        stack-no-global: true
+        stack-setup-ghc: true
+        enable-stack: true
+
+    - name: Check GHCI load
+      run: |
+        make -j${{ env.MAKE_JOBS }} test-ghci
 
   # macOS jobs
   macos-build:
@@ -143,6 +361,7 @@ jobs:
     env:
       GHC_VERSION: ${{ matrix.ghc }}
     strategy:
+      fail-fast: false
       matrix:
         macos_version: [13, 14, 15]
         ghc: [9.6.6]
@@ -175,6 +394,8 @@ jobs:
           ~/.cabal/store
           ~/.cabal/packages
         key: macos-${{ matrix.macos_version }}-ghc-${{ matrix.ghc }}-${{ hashFiles('**/*.cabal') }}
+        restore-keys: |
+          macos-${{ matrix.macos_version }}-ghc-${{ matrix.ghc }}-
 
     - name: Cache build artifacts
       uses: actions/cache@v4
@@ -184,6 +405,8 @@ jobs:
           dist-newstyle
           .stack-work
         key: macos-${{ matrix.macos_version }}-build-${{ matrix.ghc }}-${{ hashFiles('**/*.hs', '**/*.cabal', '**/*.hsc', '**/*.h', '**/*.c', '**/*.cpp') }}
+        restore-keys: |
+          macos-${{ matrix.macos_version }}-build-${{ matrix.ghc }}-
 
     - name: Cache ccache
       uses: actions/cache@v4
@@ -191,6 +414,8 @@ jobs:
       with:
         path: /tmp/ccache
         key: macos-${{ matrix.macos_version }}-ccache-${{ matrix.ghc }}-${{ hashFiles('**/*.c', '**/*.cpp', '**/*.h') }}
+        restore-keys: |
+          macos-${{ matrix.macos_version }}-ccache-${{ matrix.ghc }}-
 
     - name: Setup ccache
       uses: hendrikmuhs/ccache-action@v1.2
@@ -222,6 +447,8 @@ jobs:
           ~/.stack
           dist-newstyle
         key: macos-${{ matrix.macos_version }}-deps-${{ matrix.ghc }}-${{ hashFiles('**/*.cabal') }}
+        restore-keys: |
+          macos-${{ matrix.macos_version }}-deps-${{ matrix.ghc }}-
 
     - name: Install Haskell dependencies
       run: |
@@ -240,66 +467,7 @@ jobs:
           dist-newstyle
           .stack-work
         retention-days: 1
-
-  # Test jobs for Ubuntu
-  ubuntu-test:
-    name: Test (Ubuntu ${{ matrix.ubuntu_version }}, GHC ${{ matrix.ghc }})
-    needs: ubuntu-build
-    runs-on: ubuntu-${{ matrix.ubuntu_version }}
-    timeout-minutes: 30
-    strategy:
-      matrix:
-        ubuntu_version: [20.04, 22.04, 24.04]
-        ghc: [9.6.6]
-        build_type: [release]
-        include:
-          - ubuntu_version: 22.04
-            ghc: 9.4.8
-            build_type: test
-          - ubuntu_version: 22.04
-            ghc: 9.8.4
-            build_type: test
-          - ubuntu_version: 22.04
-            ghc: 9.10.1
-            build_type: test
-          - ubuntu_version: 22.04
-            ghc: 9.12.1
-            build_type: test
-
-    steps:
-    - uses: actions/checkout@v4
-      with:
-        fetch-depth: 0
-
-    - name: Download build artifacts
-      uses: actions/download-artifact@v4
-      with:
-        name: build-ubuntu-${{ matrix.ubuntu_version }}-${{ matrix.ghc }}-${{ matrix.build_type }}
-        path: .
-
-    - name: Cache GHC
-      uses: actions/cache@v4
-      id: cache-ghc
-      with:
-        path: |
-          ~/.ghcup
-          ~/.cabal/store
-          ~/.cabal/packages
-        key: ubuntu-${{ matrix.ubuntu_version }}-ghc-${{ matrix.ghc }}-${{ hashFiles('**/*.cabal') }}
-
-    - name: Setup GHC
-      uses: haskell/actions/setup@v2
-      with:
-        ghc-version: ${{ matrix.ghc }}
-        cabal-version: ${{ env.CABAL_VERSION }}
-        stack-version: ${{ env.STACK_VERSION }}
-        stack-no-global: true
-        stack-setup-ghc: true
-        enable-stack: true
-
-    - name: Run smoke tests
-      run: |
-        make -j${{ env.MAKE_JOBS }} smoke-tests
+        compression-level: 9
 
   # Test jobs for macOS
   macos-test:
@@ -308,6 +476,7 @@ jobs:
     runs-on: macos-${{ matrix.macos_version }}
     timeout-minutes: 30
     strategy:
+      fail-fast: false
       matrix:
         macos_version: [13, 14, 15]
         ghc: [9.6.6]
@@ -346,6 +515,8 @@ jobs:
           ~/.cabal/store
           ~/.cabal/packages
         key: macos-${{ matrix.macos_version }}-ghc-${{ matrix.ghc }}-${{ hashFiles('**/*.cabal') }}
+        restore-keys: |
+          macos-${{ matrix.macos_version }}-ghc-${{ matrix.ghc }}-
 
     - name: Setup GHC
       uses: haskell/actions/setup@v2
@@ -361,67 +532,6 @@ jobs:
       run: |
         make -j${{ env.MAKE_JOBS }} smoke-tests
 
-  # HLS jobs for Ubuntu
-  ubuntu-hls:
-    name: HLS (Ubuntu ${{ matrix.ubuntu_version }}, GHC ${{ matrix.ghc }})
-    needs: ubuntu-build
-    runs-on: ubuntu-${{ matrix.ubuntu_version }}
-    timeout-minutes: 20
-    strategy:
-      matrix:
-        ubuntu_version: [20.04, 22.04, 24.04]
-        ghc: [9.6.6]
-        build_type: [release]
-        include:
-          - ubuntu_version: 22.04
-            ghc: 9.4.8
-            build_type: test
-          - ubuntu_version: 22.04
-            ghc: 9.8.4
-            build_type: test
-          - ubuntu_version: 22.04
-            ghc: 9.10.1
-            build_type: test
-          - ubuntu_version: 22.04
-            ghc: 9.12.1
-            build_type: test
-
-    steps:
-    - uses: actions/checkout@v4
-      with:
-        fetch-depth: 0
-
-    - name: Download build artifacts
-      uses: actions/download-artifact@v4
-      with:
-        name: build-ubuntu-${{ matrix.ubuntu_version }}-${{ matrix.ghc }}-${{ matrix.build_type }}
-        path: .
-
-    - name: Cache GHC
-      uses: actions/cache@v4
-      id: cache-ghc
-      with:
-        path: |
-          ~/.ghcup
-          ~/.cabal/store
-          ~/.cabal/packages
-        key: ubuntu-${{ matrix.ubuntu_version }}-ghc-${{ matrix.ghc }}-${{ hashFiles('**/*.cabal') }}
-
-    - name: Setup GHC
-      uses: haskell/actions/setup@v2
-      with:
-        ghc-version: ${{ matrix.ghc }}
-        cabal-version: ${{ env.CABAL_VERSION }}
-        stack-version: ${{ env.STACK_VERSION }}
-        stack-no-global: true
-        stack-setup-ghc: true
-        enable-stack: true
-
-    - name: Test HLS
-      if: matrix.ghc != '9.12.1'
-      run: |
-        make -j${{ env.MAKE_JOBS }} test-hls
-
   # HLS jobs for macOS
   macos-hls:
     name: HLS (macOS ${{ matrix.macos_version }}, GHC ${{ matrix.ghc }})
@@ -429,6 +539,7 @@ jobs:
     runs-on: macos-${{ matrix.macos_version }}
     timeout-minutes: 20
     strategy:
+      fail-fast: false
       matrix:
         macos_version: [13, 14, 15]
         ghc: [9.6.6]
@@ -467,6 +578,8 @@ jobs:
           ~/.cabal/store
           ~/.cabal/packages
         key: macos-${{ matrix.macos_version }}-ghc-${{ matrix.ghc }}-${{ hashFiles('**/*.cabal') }}
+        restore-keys: |
+          macos-${{ matrix.macos_version }}-ghc-${{ matrix.ghc }}-
 
     - name: Setup GHC
       uses: haskell/actions/setup@v2
@@ -482,66 +595,6 @@ jobs:
       if: matrix.ghc != '9.12.1'
       run: |
         make -j${{ env.MAKE_JOBS }} test-hls
-
-  # GHCI jobs for Ubuntu
-  ubuntu-ghci:
-    name: GHCI (Ubuntu ${{ matrix.ubuntu_version }}, GHC ${{ matrix.ghc }})
-    needs: ubuntu-build
-    runs-on: ubuntu-${{ matrix.ubuntu_version }}
-    timeout-minutes: 20
-    strategy:
-      matrix:
-        ubuntu_version: [20.04, 22.04, 24.04]
-        ghc: [9.6.6]
-        build_type: [release]
-        include:
-          - ubuntu_version: 22.04
-            ghc: 9.4.8
-            build_type: test
-          - ubuntu_version: 22.04
-            ghc: 9.8.4
-            build_type: test
-          - ubuntu_version: 22.04
-            ghc: 9.10.1
-            build_type: test
-          - ubuntu_version: 22.04
-            ghc: 9.12.1
-            build_type: test
-
-    steps:
-    - uses: actions/checkout@v4
-      with:
-        fetch-depth: 0
-
-    - name: Download build artifacts
-      uses: actions/download-artifact@v4
-      with:
-        name: build-ubuntu-${{ matrix.ubuntu_version }}-${{ matrix.ghc }}-${{ matrix.build_type }}
-        path: .
-
-    - name: Cache GHC
-      uses: actions/cache@v4
-      id: cache-ghc
-      with:
-        path: |
-          ~/.ghcup
-          ~/.cabal/store
-          ~/.cabal/packages
-        key: ubuntu-${{ matrix.ubuntu_version }}-ghc-${{ matrix.ghc }}-${{ hashFiles('**/*.cabal') }}
-
-    - name: Setup GHC
-      uses: haskell/actions/setup@v2
-      with:
-        ghc-version: ${{ matrix.ghc }}
-        cabal-version: ${{ env.CABAL_VERSION }}
-        stack-version: ${{ env.STACK_VERSION }}
-        stack-no-global: true
-        stack-setup-ghc: true
-        enable-stack: true
-
-    - name: Check GHCI load
-      run: |
-        make -j${{ env.MAKE_JOBS }} test-ghci
 
   # GHCI jobs for macOS
   macos-ghci:
@@ -550,6 +603,7 @@ jobs:
     runs-on: macos-${{ matrix.macos_version }}
     timeout-minutes: 20
     strategy:
+      fail-fast: false
       matrix:
         macos_version: [13, 14, 15]
         ghc: [9.6.6]
@@ -588,6 +642,8 @@ jobs:
           ~/.cabal/store
           ~/.cabal/packages
         key: macos-${{ matrix.macos_version }}-ghc-${{ matrix.ghc }}-${{ hashFiles('**/*.cabal') }}
+        restore-keys: |
+          macos-${{ matrix.macos_version }}-ghc-${{ matrix.ghc }}-
 
     - name: Setup GHC
       uses: haskell/actions/setup@v2
