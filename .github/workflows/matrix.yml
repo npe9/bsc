@@ -58,8 +58,9 @@ jobs:
       uses: actions/cache@v4
       with:
         path: /tmp/.buildx-cache
-        key: ${{ runner.os }}-docker-${{ matrix.ubuntu_version }}-${{ matrix.ghc }}
+        key: ${{ runner.os }}-docker-${{ matrix.ubuntu_version }}-${{ matrix.ghc }}-${{ hashFiles(format('.github/workflows/Dockerfile.ubuntu-{0}', matrix.ubuntu_version)) }}
         restore-keys: |
+          ${{ runner.os }}-docker-${{ matrix.ubuntu_version }}-${{ matrix.ghc }}-
           ${{ runner.os }}-docker-${{ matrix.ubuntu_version }}-
 
     - name: Build and push Docker image
@@ -72,11 +73,26 @@ jobs:
         tags: ghcr.io/${{ github.repository }}/ubuntu-${{ matrix.ubuntu_version }}:${{ matrix.ghc }}
         cache-from: type=local,src=/tmp/.buildx-cache
         cache-to: type=local,dest=/tmp/.buildx-cache-new
+        build-args: |
+          GHC_VERSION=${{ matrix.ghc }}
+          CABAL_VERSION=${{ env.CABAL_VERSION }}
+          STACK_VERSION=${{ env.STACK_VERSION }}
 
     - name: Move cache
       run: |
         rm -rf /tmp/.buildx-cache
         mv /tmp/.buildx-cache-new /tmp/.buildx-cache
+
+    - name: Cache Haskell dependencies
+      uses: actions/cache@v4
+      with:
+        path: |
+          ~/.cabal/store
+          ~/.stack
+          dist-newstyle
+        key: ${{ runner.os }}-${{ matrix.ubuntu_version }}-deps-${{ matrix.ghc }}-${{ hashFiles('**/*.cabal') }}-${{ hashFiles('cabal.project') }}
+        restore-keys: |
+          ${{ runner.os }}-${{ matrix.ubuntu_version }}-deps-${{ matrix.ghc }}-
 
     - name: Run in Docker container
       run: |
@@ -87,8 +103,21 @@ jobs:
           -e CABAL_BUILD_OPTIONS="${{ env.CABAL_BUILD_OPTIONS }}" \
           -e CCACHE_DIR=/tmp/ccache \
           -e CCACHE_MAXSIZE=500M \
+          -e GHCJOBS=${{ env.GHCJOBS }} \
+          -e CABAL_JOBS=${{ env.CABAL_JOBS }} \
+          -e MAKE_JOBS=${{ env.MAKE_JOBS }} \
           ghcr.io/${{ github.repository }}/ubuntu-${{ matrix.ubuntu_version }}:${{ matrix.ghc }} \
           bash -c "cabal update && cabal build ${{ env.CABAL_BUILD_OPTIONS }}"
+
+    - name: Upload build artifacts
+      uses: actions/upload-artifact@v4
+      with:
+        name: build-ubuntu-${{ matrix.ubuntu_version }}-${{ matrix.ghc }}-${{ matrix.build_type }}
+        path: |
+          dist-newstyle
+          .stack-work
+        retention-days: 1
+        compression-level: 9
 
     strategy:
       fail-fast: false
@@ -340,7 +369,7 @@ jobs:
           ~/.ghcup
           ~/.cabal/store
           ~/.cabal/packages
-        key: macos-${{ matrix.macos_version }}-ghc-${{ matrix.ghc }}-${{ hashFiles('**/*.cabal') }}
+        key: macos-${{ matrix.macos_version }}-ghc-${{ matrix.ghc }}-${{ hashFiles('**/*.cabal') }}-${{ hashFiles('cabal.project') }}
         restore-keys: |
           macos-${{ matrix.macos_version }}-ghc-${{ matrix.ghc }}-
 
@@ -393,7 +422,7 @@ jobs:
           ~/.cabal/store
           ~/.stack
           dist-newstyle
-        key: macos-${{ matrix.macos_version }}-deps-${{ matrix.ghc }}-${{ hashFiles('**/*.cabal') }}
+        key: macos-${{ matrix.macos_version }}-deps-${{ matrix.ghc }}-${{ hashFiles('**/*.cabal') }}-${{ hashFiles('cabal.project') }}
         restore-keys: |
           macos-${{ matrix.macos_version }}-deps-${{ matrix.ghc }}-
 
@@ -461,7 +490,7 @@ jobs:
           ~/.ghcup
           ~/.cabal/store
           ~/.cabal/packages
-        key: macos-${{ matrix.macos_version }}-ghc-${{ matrix.ghc }}-${{ hashFiles('**/*.cabal') }}
+        key: macos-${{ matrix.macos_version }}-ghc-${{ matrix.ghc }}-${{ hashFiles('**/*.cabal') }}-${{ hashFiles('cabal.project') }}
         restore-keys: |
           macos-${{ matrix.macos_version }}-ghc-${{ matrix.ghc }}-
 
@@ -524,7 +553,7 @@ jobs:
           ~/.ghcup
           ~/.cabal/store
           ~/.cabal/packages
-        key: macos-${{ matrix.macos_version }}-ghc-${{ matrix.ghc }}-${{ hashFiles('**/*.cabal') }}
+        key: macos-${{ matrix.macos_version }}-ghc-${{ matrix.ghc }}-${{ hashFiles('**/*.cabal') }}-${{ hashFiles('cabal.project') }}
         restore-keys: |
           macos-${{ matrix.macos_version }}-ghc-${{ matrix.ghc }}-
 
@@ -588,7 +617,7 @@ jobs:
           ~/.ghcup
           ~/.cabal/store
           ~/.cabal/packages
-        key: macos-${{ matrix.macos_version }}-ghc-${{ matrix.ghc }}-${{ hashFiles('**/*.cabal') }}
+        key: macos-${{ matrix.macos_version }}-ghc-${{ matrix.ghc }}-${{ hashFiles('**/*.cabal') }}-${{ hashFiles('cabal.project') }}
         restore-keys: |
           macos-${{ matrix.macos_version }}-ghc-${{ matrix.ghc }}-
 

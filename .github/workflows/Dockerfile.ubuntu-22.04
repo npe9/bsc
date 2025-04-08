@@ -1,4 +1,5 @@
-FROM ubuntu:22.04
+# Build stage for GHC and tools
+FROM ubuntu:22.04 as ghc-builder
 
 # Set environment variables
 ENV DEBIAN_FRONTEND=noninteractive
@@ -34,11 +35,35 @@ RUN ghcup install ghc 9.4.8 && \
     ghcup install ghc 9.10.1 && \
     ghcup install ghc 9.12.1
 
-# Install Cabal
-RUN ghcup install cabal 3.10.2.1
+# Install Cabal and Stack
+RUN ghcup install cabal 3.10.2.1 && \
+    ghcup install stack 2.13.1
 
-# Install Stack
-RUN ghcup install stack 2.13.1
+# Final stage
+FROM ubuntu:22.04
+
+# Copy GHC and tools from builder
+COPY --from=ghc-builder /root/.ghcup /root/.ghcup
+COPY --from=ghc-builder /usr/lib/x86_64-linux-gnu/libffi* /usr/lib/x86_64-linux-gnu/
+COPY --from=ghc-builder /usr/lib/x86_64-linux-gnu/libgmp* /usr/lib/x86_64-linux-gnu/
+COPY --from=ghc-builder /usr/lib/x86_64-linux-gnu/libncurses* /usr/lib/x86_64-linux-gnu/
+COPY --from=ghc-builder /usr/lib/x86_64-linux-gnu/libtinfo* /usr/lib/x86_64-linux-gnu/
+COPY --from=ghc-builder /usr/lib/x86_64-linux-gnu/libz3* /usr/lib/x86_64-linux-gnu/
+
+# Install runtime dependencies
+RUN apt-get update && apt-get install -y \
+    libffi8ubuntu1 \
+    libgmp10 \
+    libncurses5 \
+    libtinfo5 \
+    zlib1g-dev \
+    && rm -rf /var/lib/apt/lists/*
+
+# Set up environment
+ENV PATH="/root/.ghcup/bin:$PATH"
+ENV DEBIAN_FRONTEND=noninteractive
+ENV LANG=C.UTF-8
+ENV LC_ALL=C.UTF-8
 
 # Set up ccache
 RUN apt-get update && apt-get install -y ccache && \
