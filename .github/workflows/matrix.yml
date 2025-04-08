@@ -50,6 +50,38 @@ jobs:
       GHC_VERSION: ${{ matrix.ghc }}
       CABAL_BUILD_OPTIONS: "--ghc-options=-j$(nproc) --enable-tests --enable-benchmarks --enable-optimization=2 --disable-library-profiling --enable-executable-stripping --disable-documentation"
 
+    strategy:
+      fail-fast: false
+      matrix:
+        # Primary matrix: OS versions
+        ubuntu_version: [20.04, 22.04, 24.04]
+        # Secondary matrix: GHC versions per OS version
+        include:
+          # Ubuntu 20.04
+          - ubuntu_version: 20.04
+            ghc: 9.6.6
+            build_type: release
+          # Ubuntu 22.04
+          - ubuntu_version: 22.04
+            ghc: 9.6.6
+            build_type: release
+          - ubuntu_version: 22.04
+            ghc: 9.4.8
+            build_type: test
+          - ubuntu_version: 22.04
+            ghc: 9.8.4
+            build_type: test
+          - ubuntu_version: 22.04
+            ghc: 9.10.1
+            build_type: test
+          - ubuntu_version: 22.04
+            ghc: 9.12.1
+            build_type: test
+          # Ubuntu 24.04
+          - ubuntu_version: 24.04
+            ghc: 9.6.6
+            build_type: release
+
     steps:
     - uses: actions/checkout@v4
       with:
@@ -150,39 +182,28 @@ jobs:
         retention-days: 1
         compression-level: 9
 
-    strategy:
-      fail-fast: false
-      matrix:
-        ubuntu_version: [20.04, 22.04, 24.04]
-        ghc: [9.6.6]
-        build_type: [release]
-        include:
-          - ubuntu_version: 22.04
-            ghc: 9.4.8
-            build_type: test
-          - ubuntu_version: 22.04
-            ghc: 9.8.4
-            build_type: test
-          - ubuntu_version: 22.04
-            ghc: 9.10.1
-            build_type: test
-          - ubuntu_version: 22.04
-            ghc: 9.12.1
-            build_type: test
-
   # Test jobs for Ubuntu
   ubuntu-test:
     name: Test (Ubuntu ${{ matrix.ubuntu_version }}, GHC ${{ matrix.ghc }})
     needs: ubuntu-build
     runs-on: ubuntu-${{ matrix.ubuntu_version }}
     timeout-minutes: 30
+
     strategy:
       fail-fast: false
       matrix:
+        # Primary matrix: OS versions
         ubuntu_version: [20.04, 22.04, 24.04]
-        ghc: [9.6.6]
-        build_type: [release]
+        # Secondary matrix: GHC versions per OS version
         include:
+          # Ubuntu 20.04
+          - ubuntu_version: 20.04
+            ghc: 9.6.6
+            build_type: release
+          # Ubuntu 22.04
+          - ubuntu_version: 22.04
+            ghc: 9.6.6
+            build_type: release
           - ubuntu_version: 22.04
             ghc: 9.4.8
             build_type: test
@@ -195,6 +216,10 @@ jobs:
           - ubuntu_version: 22.04
             ghc: 9.12.1
             build_type: test
+          # Ubuntu 24.04
+          - ubuntu_version: 24.04
+            ghc: 9.6.6
+            build_type: release
 
     steps:
     - uses: actions/checkout@v4
@@ -367,13 +392,22 @@ jobs:
     timeout-minutes: 60
     env:
       GHC_VERSION: ${{ matrix.ghc }}
+
     strategy:
       fail-fast: false
       matrix:
+        # Primary matrix: OS versions
         macos_version: [13, 14, 15]
-        ghc: [9.6.6]
-        build_type: [release]
+        # Secondary matrix: GHC versions per OS version
         include:
+          # macOS 13
+          - macos_version: 13
+            ghc: 9.6.6
+            build_type: release
+          # macOS 14
+          - macos_version: 14
+            ghc: 9.6.6
+            build_type: release
           - macos_version: 14
             ghc: 9.4.8
             build_type: test
@@ -386,6 +420,10 @@ jobs:
           - macos_version: 14
             ghc: 9.12.1
             build_type: test
+          # macOS 15
+          - macos_version: 15
+            ghc: 9.6.6
+            build_type: release
 
     steps:
     - uses: actions/checkout@v4
@@ -482,13 +520,22 @@ jobs:
     needs: macos-build
     runs-on: macos-${{ matrix.macos_version }}
     timeout-minutes: 30
+
     strategy:
       fail-fast: false
       matrix:
+        # Primary matrix: OS versions
         macos_version: [13, 14, 15]
-        ghc: [9.6.6]
-        build_type: [release]
+        # Secondary matrix: GHC versions per OS version
         include:
+          # macOS 13
+          - macos_version: 13
+            ghc: 9.6.6
+            build_type: release
+          # macOS 14
+          - macos_version: 14
+            ghc: 9.6.6
+            build_type: release
           - macos_version: 14
             ghc: 9.4.8
             build_type: test
@@ -501,6 +548,10 @@ jobs:
           - macos_version: 14
             ghc: 9.12.1
             build_type: test
+          # macOS 15
+          - macos_version: 15
+            ghc: 9.6.6
+            build_type: release
 
     steps:
     - uses: actions/checkout@v4
