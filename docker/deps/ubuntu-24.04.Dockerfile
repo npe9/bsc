@@ -21,6 +21,7 @@ RUN apt-get update && apt-get install -y \
     bison \
     flex \
     libgmp-dev \
+    libgmpxx-dev \
     autoconf \
     gperf \
     # Documentation dependencies
