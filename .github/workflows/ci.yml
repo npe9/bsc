@@ -30,9 +30,21 @@ jobs:
           ../.github/workflows/check_symlinks.py
 
   # ------------------------------
+  # Build Docker images first
+
+  build-docker-images:
+    name: "Build Docker Images"
+    uses: ./.github/workflows/docker-images.yml
+    secrets: inherit
+    permissions:
+      contents: read
+      packages: write
+
+  # ------------------------------
   # Builds for release, using a reliable and stable version of GHC
 
   build-and-test-ubuntu:
+    needs: build-docker-images
     strategy:
       matrix:
         os: [ '22.04', '24.04' ]
@@ -53,6 +65,7 @@ jobs:
   # in anticipation of upgrading the release builds to that version
 
   build-and-test-ghc-ubuntu:
+    needs: build-docker-images
     strategy:
       matrix:
         os: [ '22.04' ]
@@ -81,6 +94,7 @@ jobs:
   # Test the building of documentation
 
   build-doc-ubuntu:
+    needs: build-docker-images
     strategy:
       matrix:
         os: [ '22.04', '24.04' ]
@@ -92,6 +106,9 @@ jobs:
       credentials:
         username: ${{ github.actor }}
         password: ${{ secrets.GITHUB_TOKEN }}
+    permissions:
+      contents: read
+      packages: read
     timeout-minutes: 15
     steps:
       - uses: actions/checkout@v4

@@ -12,6 +12,13 @@ on:
       hls_version:
         required: true
         type: string
+    secrets:
+      GITHUB_TOKEN:
+        required: true
+
+permissions:
+  contents: read
+  packages: write
 
 jobs:
   build-ubuntu:
@@ -43,6 +50,7 @@ jobs:
           tags: ghcr.io/${{ github.repository }}-base:ubuntu-${{ inputs.os }}
           cache-from: type=gha,scope=base-${{ inputs.os }}
           cache-to: type=gha,mode=max,scope=base-${{ inputs.os }}
+          provenance: false
 
       # Build BSC image
       - name: Build BSC image
@@ -56,10 +64,12 @@ jobs:
             UBUNTU_VERSION=${{ inputs.os }}
             GHC_VERSION=${{ inputs.ghc_version }}
             HLS_VERSION=${{ inputs.hls_version }}
+            BASE_IMAGE=ghcr.io/${{ github.repository }}-base:ubuntu-${{ inputs.os }}
           cache-from: |
             type=gha,scope=bsc-${{ inputs.os }}-${{ inputs.ghc_version }}
             ghcr.io/${{ github.repository }}-base:ubuntu-${{ inputs.os }}
           cache-to: type=gha,mode=max,scope=bsc-${{ inputs.os }}-${{ inputs.ghc_version }}
+          provenance: false
 
       # Extract built artifacts
       - name: Extract artifacts
@@ -85,6 +95,9 @@ jobs:
       credentials:
         username: ${{ github.actor }}
         password: ${{ secrets.GITHUB_TOKEN }}
+    permissions:
+      contents: read
+      packages: read
     steps:
       - uses: actions/checkout@v4
 
@@ -112,6 +125,9 @@ jobs:
       credentials:
         username: ${{ github.actor }}
         password: ${{ secrets.GITHUB_TOKEN }}
+    permissions:
+      contents: read
+      packages: read
     steps:
       - uses: actions/checkout@v4
 
