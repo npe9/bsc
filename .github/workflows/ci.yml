@@ -110,7 +110,7 @@ jobs:
       image: ghcr.io/${{ github.repository }}:ubuntu-${{ matrix.os }}-ghc-9.6.7
       credentials:
         username: ${{ github.actor }}
-        password: ${{ secrets.token }}
+        password: ${{ secrets.GITHUB_TOKEN }}
     permissions:
       contents: read
       packages: read
