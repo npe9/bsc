@@ -34,10 +34,10 @@ jobs:
 
   build-docker-images:
     name: "Build Docker Images"
+    uses: ./.github/workflows/docker-images.yml
     permissions:
       contents: read
       packages: write
-    uses: ./.github/workflows/docker-images.yml
     with:
       caller_workflow: ci
     secrets:
@@ -53,10 +53,10 @@ jobs:
         os: [ '22.04', '24.04' ]
       fail-fast: false
     name: "Build/Test: ubuntu-${{ matrix.os }}"
+    uses: ./.github/workflows/build-and-test-ubuntu-docker.yml
     permissions:
       contents: read
       packages: write
-    uses: ./.github/workflows/build-and-test-ubuntu-docker.yml
     with:
       os: ${{ matrix.os }}
       ghc_version: 9.6.7
@@ -84,10 +84,10 @@ jobs:
             hls: 2.10.0.0
       fail-fast: false
     name: "Build/Test: GHC Ubuntu"
+    uses: ./.github/workflows/build-and-test-ubuntu-docker.yml
     permissions:
       contents: read
       packages: write
-    uses: ./.github/workflows/build-and-test-ubuntu-docker.yml
     with:
       os: ${{ matrix.os }}
       ghc_version: ${{ matrix.ghc.version }}
