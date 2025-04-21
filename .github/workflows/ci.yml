@@ -22,7 +22,6 @@ jobs:
 
   build-check-src:
     name: "Check: code cleanliness"
-    needs: [wait-for-docker]
     runs-on: ubuntu-latest
     container:
       image: ghcr.io/${{ github.repository }}-deps:ubuntu-24.04
@@ -35,9 +34,8 @@ jobs:
     timeout-minutes: 15
     steps:
       - uses: actions/checkout@v4
-      - name: Check tabs and whitespace
-        shell: bash
-        run: ".github/workflows/check_whitespace.sh"
+      - name: Check code
+        run: check_code.sh
 
   build-check-testsuite:
     name: "Check: testsuite lint"
@@ -53,11 +51,10 @@ jobs:
     timeout-minutes: 15
     steps:
       - uses: actions/checkout@v4
-      - name: Check CONFDIR
+      - name: Check testsuite
         run: |
           cd testsuite
-          ../.github/workflows/check_confdir.py
-          ../.github/workflows/check_symlinks.py
+          check_code.sh
 
   # ------------------------------
   # Builds for release, using a reliable and stable version of GHC
