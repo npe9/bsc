@@ -41,7 +41,7 @@ jobs:
     with:
       caller_workflow: ci
     secrets:
-      token: ${{ secrets.GITHUB_TOKEN }}
+      gh_token: ${{ secrets.GITHUB_TOKEN }}
 
   # ------------------------------
   # Builds for release, using a reliable and stable version of GHC
@@ -62,7 +62,7 @@ jobs:
       ghc_version: 9.6.7
       hls_version: 2.10.0.0
     secrets:
-      token: ${{ secrets.GITHUB_TOKEN }}
+      gh_token: ${{ secrets.GITHUB_TOKEN }}
 
   # ------------------------------
   # Tests using other recent versions of GHC, particularly newer ones,
@@ -93,7 +93,7 @@ jobs:
       ghc_version: ${{ matrix.ghc.version }}
       hls_version: ${{ matrix.ghc.hls }}
     secrets:
-      token: ${{ secrets.GITHUB_TOKEN }}
+      gh_token: ${{ secrets.GITHUB_TOKEN }}
 
   # ------------------------------
   # Test the building of documentation

@@ -15,7 +15,7 @@ on:
         type: string
         default: 'direct'
     secrets:
-      token:
+      gh_token:
         description: 'GitHub token'
         required: true
 
@@ -40,7 +40,7 @@ jobs:
         with:
           registry: ghcr.io
           username: ${{ github.actor }}
-          password: ${{ secrets.token }}
+          password: ${{ secrets.gh_token }}
 
       - name: Build and push base image
         uses: docker/build-push-action@v5
@@ -81,7 +81,7 @@ jobs:
         with:
           registry: ghcr.io
           username: ${{ github.actor }}
-          password: ${{ secrets.token }}
+          password: ${{ secrets.gh_token }}
 
       - name: Build BSC image
         uses: docker/build-push-action@v5

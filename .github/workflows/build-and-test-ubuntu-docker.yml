@@ -13,8 +13,9 @@ on:
         required: true
         type: string
     secrets:
-      GITHUB_TOKEN:
+      gh_token:
         required: true
+        description: 'GitHub token for authentication'
 
 permissions:
   contents: read
@@ -38,7 +39,7 @@ jobs:
         with:
           registry: ghcr.io
           username: ${{ github.actor }}
-          password: ${{ secrets.GITHUB_TOKEN }}
+          password: ${{ secrets.gh_token }}
 
       # Build base image if it doesn't exist
       - name: Build and push base image
@@ -94,7 +95,7 @@ jobs:
       image: ghcr.io/${{ github.repository }}:ubuntu-${{ inputs.os }}-ghc-${{ inputs.ghc_version }}
       credentials:
         username: ${{ github.actor }}
-        password: ${{ secrets.GITHUB_TOKEN }}
+        password: ${{ secrets.gh_token }}
     permissions:
       contents: read
       packages: read
@@ -124,7 +125,7 @@ jobs:
       image: ghcr.io/${{ github.repository }}:ubuntu-${{ inputs.os }}-ghc-${{ inputs.ghc_version }}
       credentials:
         username: ${{ github.actor }}
-        password: ${{ secrets.GITHUB_TOKEN }}
+        password: ${{ secrets.gh_token }}
     permissions:
       contents: read
       packages: read
