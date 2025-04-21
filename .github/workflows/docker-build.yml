@@ -1,11 +1,17 @@
-name: Build and Push Docker Images
+name: Build Docker Images
 
 on:
   push:
-    branches: [ main ]
-    tags: [ 'v*' ]
+    branches: [ main, fix/* ]
+    paths:
+      - 'docker/**'
+      - '.github/workflows/docker-build.yml'
   pull_request:
     branches: [ main ]
+    paths:
+      - 'docker/**'
+      - '.github/workflows/docker-build.yml'
+  workflow_dispatch:
 
 env:
   REGISTRY: ghcr.io
@@ -13,8 +19,8 @@ env:
   DOCKER_BUILDKIT: 1
 
 jobs:
-  # Build base images first
-  build-base:
+  # Build the dependency layer first - this contains all system dependencies
+  build-deps:
     runs-on: ubuntu-latest
     strategy:
       matrix:
@@ -22,7 +28,6 @@ jobs:
     permissions:
       contents: read
       packages: write
-
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
@@ -38,23 +43,68 @@ jobs:
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
 
-      - name: Build and push base image
+      - name: Build and push deps layer
         uses: docker/build-push-action@v5
         with:
           context: .
-          file: docker/base/ubuntu-${{ matrix.ubuntu }}.Dockerfile
+          file: docker/deps/ubuntu-${{ matrix.ubuntu }}.Dockerfile
           push: ${{ github.event_name != 'pull_request' }}
-          tags: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}-base:ubuntu-${{ matrix.ubuntu }}
-          cache-from: type=gha,scope=base-${{ matrix.ubuntu }}
-          cache-to: type=gha,mode=max,scope=base-${{ matrix.ubuntu }}
+          tags: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}-deps:ubuntu-${{ matrix.ubuntu }}
+          cache-from: |
+            type=gha,scope=deps-${{ matrix.ubuntu }}
+            type=registry,ref=${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}-deps:ubuntu-${{ matrix.ubuntu }}
+          cache-to: type=gha,mode=max,scope=deps-${{ matrix.ubuntu }}
           platforms: linux/amd64
           labels: |
             org.opencontainers.image.source=https://github.com/${{ github.repository }}
-            org.opencontainers.image.description=BSC base image for Ubuntu ${{ matrix.ubuntu }}
+            org.opencontainers.image.description=BSC dependencies for Ubuntu ${{ matrix.ubuntu }}
 
-  # Build BSC images using the base images
-  build-bsc:
-    needs: build-base
+  # Build the tools layer - this contains STP and Yices
+  build-tools:
+    needs: build-deps
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        ubuntu: ['22.04', '24.04']
+    permissions:
+      contents: read
+      packages: write
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Log in to the Container registry
+        if: github.event_name != 'pull_request'
+        uses: docker/login-action@v3
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Build and push tools layer
+        uses: docker/build-push-action@v5
+        with:
+          context: .
+          file: docker/tools/ubuntu-${{ matrix.ubuntu }}.Dockerfile
+          push: ${{ github.event_name != 'pull_request' }}
+          tags: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}-tools:ubuntu-${{ matrix.ubuntu }}
+          build-args: |
+            BASE_IMAGE=${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}-deps:ubuntu-${{ matrix.ubuntu }}
+          cache-from: |
+            type=gha,scope=tools-${{ matrix.ubuntu }}
+            type=registry,ref=${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}-tools:ubuntu-${{ matrix.ubuntu }}
+          cache-to: type=gha,mode=max,scope=tools-${{ matrix.ubuntu }}
+          platforms: linux/amd64
+          labels: |
+            org.opencontainers.image.source=https://github.com/${{ github.repository }}
+            org.opencontainers.image.description=BSC tools for Ubuntu ${{ matrix.ubuntu }}
+
+  # Build the GHC layer - this contains GHC and Haskell tools
+  build-ghc:
+    needs: build-tools
     runs-on: ubuntu-latest
     strategy:
       matrix:
@@ -73,7 +123,6 @@ jobs:
     permissions:
       contents: read
       packages: write
-
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
@@ -89,25 +138,22 @@ jobs:
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
 
-      - name: Build and push BSC image
+      - name: Build and push GHC layer
         uses: docker/build-push-action@v5
         with:
           context: .
-          file: docker/builder/Dockerfile.template
+          file: docker/ghc/Dockerfile
           push: ${{ github.event_name != 'pull_request' }}
-          tags: |
-            ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:ubuntu-${{ matrix.ubuntu }}-ghc-${{ matrix.ghc.version }}
-            ${{ github.event_name == 'push' && github.ref == 'refs/heads/main' && format('{0}/{1}:latest', env.REGISTRY, env.IMAGE_NAME) || '' }}
+          tags: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}-ghc:ubuntu-${{ matrix.ubuntu }}-${{ matrix.ghc.version }}
           build-args: |
-            UBUNTU_VERSION=${{ matrix.ubuntu }}
+            BASE_IMAGE=${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}-tools:ubuntu-${{ matrix.ubuntu }}
             GHC_VERSION=${{ matrix.ghc.version }}
             HLS_VERSION=${{ matrix.ghc.hls }}
-            BASE_IMAGE=${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}-base:ubuntu-${{ matrix.ubuntu }}
           cache-from: |
-            type=gha,scope=bsc-${{ matrix.ubuntu }}-${{ matrix.ghc.version }}
-            ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}-base:ubuntu-${{ matrix.ubuntu }}
-          cache-to: type=gha,mode=max,scope=bsc-${{ matrix.ubuntu }}-${{ matrix.ghc.version }}
+            type=gha,scope=ghc-${{ matrix.ubuntu }}-${{ matrix.ghc.version }}
+            type=registry,ref=${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}-ghc:ubuntu-${{ matrix.ubuntu }}-${{ matrix.ghc.version }}
+          cache-to: type=gha,mode=max,scope=ghc-${{ matrix.ubuntu }}-${{ matrix.ghc.version }}
           platforms: linux/amd64
           labels: |
             org.opencontainers.image.source=https://github.com/${{ github.repository }}
-            org.opencontainers.image.description=BSC with GHC ${{ matrix.ghc.version }} on Ubuntu ${{ matrix.ubuntu }} 
+            org.opencontainers.image.description=BSC GHC ${{ matrix.ghc.version }} for Ubuntu ${{ matrix.ubuntu }} 
