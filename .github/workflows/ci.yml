@@ -58,10 +58,11 @@ jobs:
       os: ${{ matrix.os }}
       ghc_version: 9.6.7
       hls_version: 2.10.0.0
+    secrets:
+      token: ${{ secrets.GITHUB_TOKEN }}
     permissions:
       contents: read
       packages: write
-    secrets: inherit
 
   # ------------------------------
   # Tests using other recent versions of GHC, particularly newer ones,
@@ -88,10 +89,11 @@ jobs:
       os: ${{ matrix.os }}
       ghc_version: ${{ matrix.ghc.version }}
       hls_version: ${{ matrix.ghc.hls }}
+    secrets:
+      token: ${{ secrets.GITHUB_TOKEN }}
     permissions:
       contents: read
       packages: write
-    secrets: inherit
 
   # ------------------------------
   # Test the building of documentation
@@ -108,7 +110,7 @@ jobs:
       image: ghcr.io/${{ github.repository }}:ubuntu-${{ matrix.os }}-ghc-9.6.7
       credentials:
         username: ${{ github.actor }}
-        password: ${{ secrets.GITHUB_TOKEN }}
+        password: ${{ secrets.token }}
     permissions:
       contents: read
       packages: read
