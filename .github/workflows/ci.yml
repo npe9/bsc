@@ -34,14 +34,14 @@ jobs:
 
   build-docker-images:
     name: "Build Docker Images"
+    permissions:
+      contents: read
+      packages: write
     uses: ./.github/workflows/docker-images.yml
     with:
       caller_workflow: ci
     secrets:
       token: ${{ secrets.GITHUB_TOKEN }}
-    permissions:
-      contents: read
-      packages: write
 
   # ------------------------------
   # Builds for release, using a reliable and stable version of GHC
@@ -53,6 +53,9 @@ jobs:
         os: [ '22.04', '24.04' ]
       fail-fast: false
     name: "Build/Test: ubuntu-${{ matrix.os }}"
+    permissions:
+      contents: read
+      packages: write
     uses: ./.github/workflows/build-and-test-ubuntu-docker.yml
     with:
       os: ${{ matrix.os }}
@@ -60,9 +63,6 @@ jobs:
       hls_version: 2.10.0.0
     secrets:
       token: ${{ secrets.GITHUB_TOKEN }}
-    permissions:
-      contents: read
-      packages: write
 
   # ------------------------------
   # Tests using other recent versions of GHC, particularly newer ones,
@@ -84,6 +84,9 @@ jobs:
             hls: 2.10.0.0
       fail-fast: false
     name: "Build/Test: GHC Ubuntu"
+    permissions:
+      contents: read
+      packages: write
     uses: ./.github/workflows/build-and-test-ubuntu-docker.yml
     with:
       os: ${{ matrix.os }}
@@ -91,9 +94,6 @@ jobs:
       hls_version: ${{ matrix.ghc.hls }}
     secrets:
       token: ${{ secrets.GITHUB_TOKEN }}
-    permissions:
-      contents: read
-      packages: write
 
   # ------------------------------
   # Test the building of documentation
