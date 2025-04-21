@@ -1,0 +1,51 @@
+ARG UBUNTU_VERSION
+ARG GHC_VERSION
+ARG HLS_VERSION
+
+FROM ghcr.io/b-lang-org/bsc-base:ubuntu-${UBUNTU_VERSION} AS builder
+
+# Install specific GHC version
+RUN ghcup install ghc ${GHC_VERSION} && \
+    ghcup set ghc ${GHC_VERSION}
+
+# Install HLS if specified
+RUN if [ -n "${HLS_VERSION}" ]; then \
+        ghcup install hls ${HLS_VERSION}; \
+    fi
+
+# Install Haskell dependencies
+RUN cabal update && \
+    cabal v1-install old-time regex-compat split syb
+
+# Set up ccache
+ENV CCACHE_DIR=/ccache
+RUN mkdir -p /ccache
+
+# Copy source code
+COPY . /build/
+
+# Build BSC
+RUN cd /build && \
+    make -j3 GHCJOBS=2 GHCRTSFLAGS='+RTS -M5G -A128m -RTS' install-src
+
+# Create runtime image
+FROM ubuntu:${UBUNTU_VERSION}
+
+# Install runtime dependencies
+RUN apt-get update && \
+    DEBIAN_FRONTEND=noninteractive apt-get install -y \
+    build-essential \
+    tcl \
+    iverilog \
+    && rm -rf /var/lib/apt/lists/*
+
+# Copy built files from builder
+COPY --from=builder /build/inst /opt/bluespec/
+
+# Set PATH
+ENV PATH=/opt/bluespec/bin:$PATH
+
+# Label the image
+LABEL org.opencontainers.image.source=https://github.com/B-Lang-org/bsc
+LABEL org.opencontainers.image.description="BSC built with GHC ${GHC_VERSION} on Ubuntu ${UBUNTU_VERSION}"
+LABEL org.opencontainers.image.licenses=BSD-3-Clause 
