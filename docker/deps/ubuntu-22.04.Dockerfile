@@ -23,6 +23,7 @@ RUN apt-get update && apt-get install -y \
     libgmp-dev \
     autoconf \
     gperf \
+    libboost-program-options-dev \
     # Documentation dependencies
     texlive-latex-base \
     texlive-latex-recommended \
