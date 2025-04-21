@@ -37,6 +37,8 @@ jobs:
     uses: ./.github/workflows/docker-images.yml
     with:
       caller_workflow: ci
+    secrets:
+      token: ${{ secrets.GITHUB_TOKEN }}
     permissions:
       contents: read
       packages: write
