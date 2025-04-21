@@ -49,11 +49,11 @@ jobs:
   build-and-test-ubuntu:
     name: "Build/Test: ubuntu-${{ matrix.os }}"
     needs: build-docker-images
-    uses: ./.github/workflows/build-and-test-ubuntu-docker.yml
     strategy:
       matrix:
         os: [ '22.04', '24.04' ]
       fail-fast: false
+    uses: ./.github/workflows/build-and-test-ubuntu-docker.yml
     permissions:
       contents: read
       packages: write
@@ -71,7 +71,6 @@ jobs:
   build-and-test-ghc-ubuntu:
     name: "Build/Test: GHC Ubuntu"
     needs: build-docker-images
-    uses: ./.github/workflows/build-and-test-ubuntu-docker.yml
     strategy:
       matrix:
         os: [ '22.04' ]
@@ -85,6 +84,7 @@ jobs:
           - version: 9.12.2
             hls: 2.10.0.0
       fail-fast: false
+    uses: ./.github/workflows/build-and-test-ubuntu-docker.yml
     permissions:
       contents: read
       packages: write
@@ -101,11 +101,11 @@ jobs:
   build-doc-ubuntu:
     name: "Build doc: ubuntu-${{ matrix.os }}"
     needs: build-docker-images
-    runs-on: ubuntu-latest
     strategy:
       matrix:
         os: [ '22.04', '24.04' ]
       fail-fast: false
+    runs-on: ubuntu-latest
     container:
       image: ghcr.io/${{ github.repository }}:ubuntu-${{ matrix.os }}-ghc-9.6.7
       credentials:
