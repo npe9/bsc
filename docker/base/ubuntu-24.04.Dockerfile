@@ -8,6 +8,7 @@ RUN apt-get update && \
     git \
     pkg-config \
     libgmp-dev \
+    libgmpxx-dev \
     bison \
     flex \
     && rm -rf /var/lib/apt/lists/*
