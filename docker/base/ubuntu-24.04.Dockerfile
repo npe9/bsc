@@ -6,6 +6,8 @@ RUN apt-get update && \
     build-essential \
     cmake \
     git \
+    pkg-config \
+    libgmp-dev \
     && rm -rf /var/lib/apt/lists/*
 
 # Build STP
