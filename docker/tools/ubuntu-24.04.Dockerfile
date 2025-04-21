@@ -39,7 +39,9 @@ FROM builder-base AS builder-yices
 WORKDIR /build
 COPY src/vendor/yices /build/yices
 WORKDIR /build/yices/v2.6
-RUN autoconf && \
+RUN git clone --depth 1 https://github.com/SRI-CSL/yices2.git && \
+    cd yices2 && \
+    autoconf && \
     ./configure && \
     make -j$(nproc) && \
     make install
