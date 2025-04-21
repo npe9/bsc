@@ -1,8 +1,8 @@
-ARG UBUNTU_VERSION
+ARG BASE_IMAGE
+FROM ${BASE_IMAGE} AS builder
+
 ARG GHC_VERSION
 ARG HLS_VERSION
-
-FROM ghcr.io/b-lang-org/bsc-base:ubuntu-${UBUNTU_VERSION} AS builder
 
 # Install specific GHC version
 RUN ghcup install ghc ${GHC_VERSION} && \
@@ -29,6 +29,7 @@ RUN cd /build && \
     make -j3 GHCJOBS=2 GHCRTSFLAGS='+RTS -M5G -A128m -RTS' install-src
 
 # Create runtime image
+ARG UBUNTU_VERSION
 FROM ubuntu:${UBUNTU_VERSION}
 
 # Install runtime dependencies
