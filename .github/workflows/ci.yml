@@ -58,6 +58,10 @@ jobs:
     timeout-minutes: 15
     steps:
       - uses: actions/checkout@v4
+      - name: Configure Git safe directory
+        run: git config --global --add safe.directory /__w/bsc/bsc
+      - name: Fix CONFDIR paths
+        run: fix_confdir.sh
       - name: Check code
         run: check_code.sh
 
@@ -76,6 +80,10 @@ jobs:
     timeout-minutes: 15
     steps:
       - uses: actions/checkout@v4
+      - name: Configure Git safe directory
+        run: git config --global --add safe.directory /__w/bsc/bsc
+      - name: Fix CONFDIR paths
+        run: fix_confdir.sh
       - name: Check testsuite
         run: |
           cd testsuite

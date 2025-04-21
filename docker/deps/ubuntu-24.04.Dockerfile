@@ -34,9 +34,10 @@ RUN apt-get update && apt-get install -y \
 # Create cache directories
 RUN mkdir -p /ccache
 
-# Add code check script
+# Add scripts
 COPY docker/deps/check_code.sh /usr/local/bin/check_code.sh
-RUN chmod +x /usr/local/bin/check_code.sh
+COPY docker/deps/fix_confdir.sh /usr/local/bin/fix_confdir.sh
+RUN chmod +x /usr/local/bin/check_code.sh /usr/local/bin/fix_confdir.sh
 
 # Label the image
 LABEL org.opencontainers.image.source=https://github.com/B-Lang-org/bsc
