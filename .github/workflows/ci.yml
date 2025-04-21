@@ -35,7 +35,8 @@ jobs:
   build-docker-images:
     name: "Build Docker Images"
     uses: ./.github/workflows/docker-images.yml
-    secrets: inherit
+    with:
+      caller_workflow: ci
     permissions:
       contents: read
       packages: write
