@@ -38,8 +38,11 @@ RUN make install-stp PREFIX=/usr/local
 FROM builder-base AS builder-yices
 WORKDIR /build
 COPY src/vendor/yices /build/yices
-WORKDIR /build/yices
-RUN make install-yices PREFIX=/usr/local
+WORKDIR /build/yices/v2.6
+RUN autoconf && \
+    ./configure && \
+    make -j$(nproc) && \
+    make install
 
 # Create final image
 FROM ${BASE_IMAGE}
