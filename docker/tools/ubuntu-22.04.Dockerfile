@@ -14,7 +14,9 @@ RUN apt-get update && apt-get install -y \
     zlib1g-dev \
     bison \
     flex \
-    && rm -rf /var/lib/apt/lists/*
+    && rm -rf /var/lib/apt/lists/* \
+    && which gperf \
+    && gperf --version
 
 # Build minisat (required by STP)
 WORKDIR /build
@@ -44,10 +46,13 @@ FROM ${BASE_IMAGE}
 
 # Install runtime dependencies
 RUN apt-get update && apt-get install -y \
-    libboost-program-options1.71.0 \
+    libboost-program-options1.74.0 \
     libgmp10 \
     zlib1g \
-    && rm -rf /var/lib/apt/lists/*
+    gperf \
+    && rm -rf /var/lib/apt/lists/* \
+    && which gperf \
+    && gperf --version
 
 # Copy built artifacts from builder stages
 COPY --from=builder-base /usr/local/lib/libminisat* /usr/local/lib/
