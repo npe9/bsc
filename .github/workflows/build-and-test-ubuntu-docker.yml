@@ -1,0 +1,133 @@
+name: Build and Test Ubuntu (Docker)
+
+on:
+  workflow_call:
+    inputs:
+      os:
+        required: true
+        type: string
+      ghc_version:
+        required: true
+        type: string
+      hls_version:
+        required: true
+        type: string
+
+jobs:
+  build-ubuntu:
+    name: "Build: ${{ inputs.os }} ghc-${{ inputs.ghc_version }}"
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          submodules: recursive
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Log in to GitHub Container Registry
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      # Build base image if it doesn't exist
+      - name: Build and push base image
+        uses: docker/build-push-action@v5
+        with:
+          context: .
+          file: docker/base/ubuntu-${{ inputs.os }}.Dockerfile
+          push: true
+          tags: ghcr.io/${{ github.repository }}-base:ubuntu-${{ inputs.os }}
+          cache-from: type=gha,scope=base-${{ inputs.os }}
+          cache-to: type=gha,mode=max,scope=base-${{ inputs.os }}
+
+      # Build BSC image
+      - name: Build BSC image
+        uses: docker/build-push-action@v5
+        with:
+          context: .
+          file: docker/builder/Dockerfile.template
+          push: true
+          tags: ghcr.io/${{ github.repository }}:ubuntu-${{ inputs.os }}-ghc-${{ inputs.ghc_version }}
+          build-args: |
+            UBUNTU_VERSION=${{ inputs.os }}
+            GHC_VERSION=${{ inputs.ghc_version }}
+            HLS_VERSION=${{ inputs.hls_version }}
+          cache-from: |
+            type=gha,scope=bsc-${{ inputs.os }}-${{ inputs.ghc_version }}
+            ghcr.io/${{ github.repository }}-base:ubuntu-${{ inputs.os }}
+          cache-to: type=gha,mode=max,scope=bsc-${{ inputs.os }}-${{ inputs.ghc_version }}
+
+      # Extract built artifacts
+      - name: Extract artifacts
+        run: |
+          docker create --name temp ghcr.io/${{ github.repository }}:ubuntu-${{ inputs.os }}-ghc-${{ inputs.ghc_version }}
+          docker cp temp:/opt/bluespec ./inst
+          docker rm temp
+          tar czf inst.tar.gz inst
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ inputs.os }} ghc-${{ inputs.ghc_version }} build
+          path: inst.tar.gz
+
+  test-ubuntu:
+    name: "Test ${{ inputs.os }} ghc-${{ inputs.ghc_version }}"
+    runs-on: ubuntu-latest
+    timeout-minutes: 120
+    needs: build-ubuntu
+    container:
+      image: ghcr.io/${{ github.repository }}:ubuntu-${{ inputs.os }}-ghc-${{ inputs.ghc_version }}
+      credentials:
+        username: ${{ github.actor }}
+        password: ${{ secrets.GITHUB_TOKEN }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Run testsuite
+        run: |
+          # Use -O0 for significantly faster C++ compiles
+          export CXXFLAGS="-O0"
+          make -C testsuite
+
+      # Save test logs on failure
+      - name: Archive test logs
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: test-logs-${{ inputs.os }}-ghc-${{ inputs.ghc_version }}
+          path: logs.tar.gz
+
+  test-toooba-ubuntu:
+    name: "Test Toooba ${{ inputs.os }} ghc-${{ inputs.ghc_version }}"
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    needs: build-ubuntu
+    container:
+      image: ghcr.io/${{ github.repository }}:ubuntu-${{ inputs.os }}-ghc-${{ inputs.ghc_version }}
+      credentials:
+        username: ${{ github.actor }}
+        password: ${{ secrets.GITHUB_TOKEN }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Download Toooba
+        run: |
+          git clone --recursive https://github.com/bluespec/Toooba ../Toooba
+
+      - name: Compile and link Toooba
+        run: |
+          cd ../Toooba/builds/RV64ACDFIMSU_Toooba_bluesim/
+          export CXXFLAGS="-O0"
+          sed -i 's/-parallel-sim-link 8/-parallel-sim-link 2/' ../Resources/Include_bluesim.mk
+          make BSC_C_FLAGS="-no-show-version -no-show-timestamps" all
+
+      - name: Test Toooba
+        run: |
+          cd ../Toooba/builds/RV64ACDFIMSU_Toooba_bluesim/
+          make test | tee test.log
+          grep -q 'PASS' test.log 
