@@ -5,46 +5,17 @@ on: [ push, pull_request ]
 
 jobs:
   # ------------------------------
-  # Build dependency images first
-  build-deps:
-    name: "Build: deps-ubuntu-${{ matrix.os }}"
-    runs-on: ubuntu-latest
-    strategy:
-      matrix:
-        os: [ '22.04', '24.04' ]
-    permissions:
-      contents: read
-      packages: write
-    steps:
-      - uses: actions/checkout@v4
-      
-      - name: Set up Docker Buildx
-        uses: docker/setup-buildx-action@v3
-      
-      - name: Log in to GitHub Container Registry
-        uses: docker/login-action@v3
-        with:
-          registry: ghcr.io
-          username: ${{ github.actor }}
-          password: ${{ secrets.GITHUB_TOKEN }}
-      
-      - name: Build and push deps image
-        uses: docker/build-push-action@v5
-        with:
-          context: .
-          file: docker/deps/ubuntu-${{ matrix.os }}.Dockerfile
-          push: true
-          tags: ghcr.io/${{ github.repository }}-deps:ubuntu-${{ matrix.os }}
-          build-args: |
-            BASE_IMAGE=ubuntu:${{ matrix.os }}
-          cache-from: type=gha
-          cache-to: type=gha,mode=max
+  # Call docker-images workflow to ensure images exist
+  ensure-images:
+    uses: ./.github/workflows/docker-images.yml
+    secrets:
+      gh_token: ${{ secrets.GITHUB_TOKEN }}
 
   # ------------------------------
   # Basic linting requirements for new commits
-
   build-check-src:
     name: "Check: code cleanliness"
+    needs: [ensure-images]
     runs-on: ubuntu-latest
     container:
       image: ghcr.io/${{ github.repository }}-deps:ubuntu-24.04
@@ -66,6 +37,7 @@ jobs:
 
   build-check-testsuite:
     name: "Check: testsuite lint"
+    needs: [ensure-images]
     runs-on: ubuntu-latest
     container:
       image: ghcr.io/${{ github.repository }}-deps:ubuntu-24.04
@@ -89,13 +61,12 @@ jobs:
 
   # ------------------------------
   # Builds for release, using a reliable and stable version of GHC
-
   build-and-test-ubuntu:
     name: "Build/Test: ubuntu-${{ matrix.os }}"
     needs: [build-check-src, build-check-testsuite]
     runs-on: ubuntu-latest
     container:
-      image: ghcr.io/${{ github.repository }}-ghc:ubuntu-${{ matrix.os }}-9.6.7
+      image: ghcr.io/${{ github.repository }}:ubuntu-${{ matrix.os }}-ghc-9.6.7
       credentials:
         username: ${{ github.actor }}
         password: ${{ secrets.GITHUB_TOKEN }}
@@ -130,13 +101,12 @@ jobs:
 
   # ------------------------------
   # Tests using other recent versions of GHC
-
   build-and-test-ghc-ubuntu:
     name: "Build/Test: GHC Ubuntu"
     needs: [build-check-src, build-check-testsuite]
     runs-on: ubuntu-latest
     container:
-      image: ghcr.io/${{ github.repository }}-ghc:ubuntu-22.04-${{ matrix.ghc.version }}
+      image: ghcr.io/${{ github.repository }}:ubuntu-22.04-ghc-${{ matrix.ghc.version }}
       credentials:
         username: ${{ github.actor }}
         password: ${{ secrets.GITHUB_TOKEN }}
@@ -186,7 +156,6 @@ jobs:
 
   # ------------------------------
   # Test the building of documentation
-
   build-doc-ubuntu:
     name: "Build doc: ubuntu-${{ matrix.os }}"
     needs: [build-check-src, build-check-testsuite]
