@@ -4,24 +4,48 @@ name: CI
 on: [ push, pull_request ]
 
 jobs:
-  # Wait for Docker images to be built
-  wait-for-docker:
-    name: "Wait for Docker images"
+  # ------------------------------
+  # Build dependency images first
+  build-deps:
+    name: "Build: deps-ubuntu-${{ matrix.os }}"
     runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        os: [ '22.04', '24.04' ]
+    permissions:
+      contents: read
+      packages: write
     steps:
-      - name: Wait for Docker build
-        uses: lewagon/wait-on-check-action@v1.3.1
+      - uses: actions/checkout@v4
+      
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+      
+      - name: Log in to GitHub Container Registry
+        uses: docker/login-action@v3
         with:
-          ref: ${{ github.ref }}
-          check-name: 'Build Docker Images'
-          repo-token: ${{ secrets.GITHUB_TOKEN }}
-          wait-interval: 10
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+      
+      - name: Build and push deps image
+        uses: docker/build-push-action@v5
+        with:
+          context: .
+          file: docker/deps/ubuntu-${{ matrix.os }}.Dockerfile
+          push: true
+          tags: ghcr.io/${{ github.repository }}-deps:ubuntu-${{ matrix.os }}
+          build-args: |
+            BASE_IMAGE=ubuntu:${{ matrix.os }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
 
   # ------------------------------
   # Basic linting requirements for new commits
 
   build-check-src:
     name: "Check: code cleanliness"
+    needs: [build-deps]
     runs-on: ubuntu-latest
     container:
       image: ghcr.io/${{ github.repository }}-deps:ubuntu-24.04
@@ -39,6 +63,7 @@ jobs:
 
   build-check-testsuite:
     name: "Check: testsuite lint"
+    needs: [build-deps]
     runs-on: ubuntu-latest
     container:
       image: ghcr.io/${{ github.repository }}-deps:ubuntu-24.04
