@@ -1,15 +1,23 @@
-ARG BASE_IMAGE
-FROM ${BASE_IMAGE} AS builder
-
 ARG GHC_VERSION
+FROM haskell:${GHC_VERSION}-slim-bullseye AS builder
+
 ARG HLS_VERSION
 
-# Install specific GHC version
-RUN ghcup install ghc ${GHC_VERSION} && \
-    ghcup set ghc ${GHC_VERSION}
+# Install system dependencies
+RUN apt-get update && \
+    DEBIAN_FRONTEND=noninteractive apt-get install -y \
+    build-essential \
+    ccache \
+    git \
+    libelf-dev \
+    pkg-config \
+    python3 \
+    python3-pip \
+    && rm -rf /var/lib/apt/lists/*
 
 # Install HLS if specified
 RUN if [ -n "${HLS_VERSION}" ]; then \
+        curl --proto '=https' --tlsv1.2 -sSf https://get-ghcup.haskell.org | sh && \
         ghcup install hls ${HLS_VERSION}; \
     fi
 
@@ -21,11 +29,18 @@ RUN cabal update && \
 ENV CCACHE_DIR=/ccache
 RUN mkdir -p /ccache
 
-# Copy source code
-COPY . /build/
+# Copy source code and submodules
+WORKDIR /build
+COPY . .
 
-# Build BSC
-RUN cd /build && \
+# Initialize and update submodules with caching
+RUN --mount=type=cache,target=/build/.git/modules \
+    git submodule sync --recursive && \
+    git submodule update --init --force --recursive --depth=1
+
+# Build BSC with caching
+RUN --mount=type=cache,target=/ccache \
+    --mount=type=cache,target=/build/inst \
     make -j3 GHCJOBS=2 GHCRTSFLAGS='+RTS -M5G -A128m -RTS' install-src
 
 # Create runtime image
@@ -38,13 +53,17 @@ RUN apt-get update && \
     build-essential \
     tcl \
     iverilog \
+    libelf1 \
     && rm -rf /var/lib/apt/lists/*
 
 # Copy built files from builder
 COPY --from=builder /build/inst /opt/bluespec/
+COPY --from=builder /usr/local/lib /usr/local/lib
+COPY --from=builder /usr/local/bin /usr/local/bin
 
-# Set PATH
-ENV PATH=/opt/bluespec/bin:$PATH
+# Set PATH and LD_LIBRARY_PATH
+ENV PATH=/opt/bluespec/bin:$PATH \
+    LD_LIBRARY_PATH=/usr/local/lib:$LD_LIBRARY_PATH
 
 # Label the image
 LABEL org.opencontainers.image.source=https://github.com/B-Lang-org/bsc
