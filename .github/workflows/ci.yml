@@ -45,7 +45,6 @@ jobs:
 
   build-check-src:
     name: "Check: code cleanliness"
-    needs: [build-deps]
     runs-on: ubuntu-latest
     container:
       image: ghcr.io/${{ github.repository }}-deps:ubuntu-24.04
@@ -67,7 +66,6 @@ jobs:
 
   build-check-testsuite:
     name: "Check: testsuite lint"
-    needs: [build-deps]
     runs-on: ubuntu-latest
     container:
       image: ghcr.io/${{ github.repository }}-deps:ubuntu-24.04
