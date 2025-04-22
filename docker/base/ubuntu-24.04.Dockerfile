@@ -1,41 +1,5 @@
-FROM ubuntu:24.04 AS stp-builder
-
-# Install STP build dependencies
-RUN apt-get update && \
-    DEBIAN_FRONTEND=noninteractive apt-get install -y \
-    build-essential \
-    cmake \
-    git \
-    && rm -rf /var/lib/apt/lists/*
-
-# Build STP
-WORKDIR /build
-RUN git clone --depth 1 https://github.com/stp/stp.git && \
-    cd stp && \
-    mkdir build && \
-    cd build && \
-    cmake .. && \
-    make -j$(nproc) && \
-    make install
-
-FROM ubuntu:24.04 AS yices-builder
-
-# Install Yices build dependencies
-RUN apt-get update && \
-    DEBIAN_FRONTEND=noninteractive apt-get install -y \
-    build-essential \
-    autoconf \
-    git \
-    && rm -rf /var/lib/apt/lists/*
-
-# Build Yices
-WORKDIR /build
-RUN git clone --depth 1 https://github.com/SRI-CSL/yices2.git && \
-    cd yices2 && \
-    autoconf && \
-    ./configure && \
-    make -j$(nproc) && \
-    make install
+ARG REPOSITORY
+FROM ghcr.io/${REPOSITORY}-tools:ubuntu-24.04 AS tools
 
 FROM ubuntu:24.04
 
@@ -60,14 +24,18 @@ RUN apt-get update && apt-get install -y \
 # Create cache directories
 RUN mkdir -p /ccache
 
-# Copy built artifacts from builders
-COPY --from=stp-builder /usr/local/include/stp /usr/local/include/stp
-COPY --from=stp-builder /usr/local/lib/lib*stp* /usr/local/lib/
-COPY --from=stp-builder /usr/local/bin/stp* /usr/local/bin/
+# Copy built artifacts from tools image
+COPY --from=tools /usr/local/include/minisat /usr/local/include/minisat
+COPY --from=tools /usr/local/lib/libminisat.* /usr/local/lib/
+COPY --from=tools /usr/local/bin/minisat /usr/local/bin/
 
-COPY --from=yices-builder /usr/local/include/yices* /usr/local/include/
-COPY --from=yices-builder /usr/local/lib/libyices* /usr/local/lib/
-COPY --from=yices-builder /usr/local/bin/yices* /usr/local/bin/
+COPY --from=tools /usr/local/include/stp /usr/local/include/stp
+COPY --from=tools /usr/local/lib/libstp.* /usr/local/lib/
+COPY --from=tools /usr/local/bin/stp /usr/local/bin/
+
+COPY --from=tools /usr/local/include/yices* /usr/local/include/
+COPY --from=tools /usr/local/lib/libyices* /usr/local/lib/
+COPY --from=tools /usr/local/bin/yices* /usr/local/bin/
 
 # Update library cache
 RUN ldconfig

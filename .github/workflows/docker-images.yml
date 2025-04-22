@@ -87,6 +87,8 @@ jobs:
           file: docker/base/ubuntu-${{ matrix.ubuntu }}.Dockerfile
           push: true
           tags: ghcr.io/${{ github.repository }}-base:ubuntu-${{ matrix.ubuntu }}
+          build-args: |
+            REPOSITORY=${{ github.repository }}
           cache-from: type=gha,scope=base-${{ matrix.ubuntu }}
           cache-to: type=gha,mode=max,scope=base-${{ matrix.ubuntu }}
           provenance: false
