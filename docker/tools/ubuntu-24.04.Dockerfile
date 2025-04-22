@@ -1,80 +1,91 @@
-ARG BASE_IMAGE
-FROM ${BASE_IMAGE} AS builder-base
+FROM ubuntu:24.04 as builder
 
 # Install build dependencies
-RUN apt-get update && apt-get install -y \
+RUN apt-get update && \
+    DEBIAN_FRONTEND=noninteractive apt-get install -y \
     build-essential \
-    cmake \
     git \
-    libboost-dev \
-    libboost-program-options-dev \
-    autoconf \
-    gperf \
-    libgmp-dev \
+    python3 \
     zlib1g-dev \
-    bison \
     flex \
-    && rm -rf /var/lib/apt/lists/* \
-    && which gperf \
-    && gperf --version
+    bison \
+    cmake \
+    libboost-all-dev \
+    libgmp-dev \
+    libtinfo-dev \
+    gperf \
+    autoconf \
+    automake \
+    libtool \
+    && rm -rf /var/lib/apt/lists/*
 
-# Build minisat (required by STP)
-WORKDIR /build
+# Build and install minisat with C++11 compatibility
 RUN git clone --depth 1 https://github.com/niklasso/minisat.git && \
     cd minisat && \
-    export CXXFLAGS="-fpermissive" && \
-    make config prefix=/usr/local && \
+    sed -i 's/friend Lit mkLit(Var var, bool sign = false);/friend Lit mkLit(Var var, bool sign);/' minisat/core/SolverTypes.h && \
+    sed -i 's/inline  Lit  mkLit     (Var var, bool sign) { Lit p; p.x = var + var + (int)sign; return p; }/inline  Lit  mkLit     (Var var, bool sign = false) { Lit p; p.x = var + var + (int)sign; return p; }/' minisat/core/SolverTypes.h && \
+    mkdir build && \
+    cd build && \
+    cmake -DCMAKE_BUILD_TYPE=Release \
+          -DCMAKE_INSTALL_PREFIX=/usr/local \
+          -DCMAKE_CXX_FLAGS="-fpermissive -std=c++11" \
+          .. && \
     make -j$(nproc) && \
-    make install
+    make install && \
+    cd ../.. && \
+    rm -rf minisat
 
-# Build STP in its own layer
-FROM builder-base AS builder-stp
-WORKDIR /build
-COPY src/vendor/stp /build/stp
-WORKDIR /build/stp
-RUN make install-stp PREFIX=/usr/local
+# Build and install STP using CMake
+RUN git clone --depth 1 https://github.com/stp/stp.git && \
+    cd stp && \
+    git submodule init && \
+    git submodule update && \
+    mkdir build && \
+    cd build && \
+    cmake -DCMAKE_BUILD_TYPE=Release \
+          -DCMAKE_INSTALL_PREFIX=/usr/local \
+          -DSTATICCOMPILE=OFF \
+          -DENABLE_PYTHON_INTERFACE=OFF \
+          .. && \
+    make -j$(nproc) && \
+    make install && \
+    cd ../.. && \
+    rm -rf stp
 
-# Build Yices in its own layer
-FROM builder-base AS builder-yices
-WORKDIR /build
-COPY src/vendor/yices /build/yices
-WORKDIR /build/yices/v2.6
+# Build and install Yices
 RUN git clone --depth 1 https://github.com/SRI-CSL/yices2.git && \
     cd yices2 && \
     autoconf && \
-    ./configure && \
+    ./configure --prefix=/usr/local && \
     make -j$(nproc) && \
-    make install
+    make install && \
+    cd .. && \
+    rm -rf yices2
 
 # Create final image
-FROM ${BASE_IMAGE}
+FROM ubuntu:24.04
 
-# Install runtime dependencies
-RUN apt-get update && apt-get install -y \
+# Install runtime dependencies and clean up
+RUN apt-get update && \
+    DEBIAN_FRONTEND=noninteractive apt-get install -y \
+    libgomp1 \
     libboost-program-options1.74.0 \
+    libboost-serialization1.74.0 \
     libgmp10 \
-    zlib1g \
-    gperf \
-    && rm -rf /var/lib/apt/lists/* \
-    && which gperf \
-    && gperf --version
+    && rm -rf /var/lib/apt/lists/*
 
-# Copy built artifacts from builder stages
-COPY --from=builder-base /usr/local/lib/libminisat* /usr/local/lib/
-COPY --from=builder-base /usr/local/include/minisat /usr/local/include/minisat
-
-COPY --from=builder-stp /usr/local/include/stp /usr/local/include/stp
-COPY --from=builder-stp /usr/local/lib/lib*stp* /usr/local/lib/
-COPY --from=builder-stp /usr/local/bin/stp* /usr/local/bin/
-
-COPY --from=builder-yices /usr/local/include/yices* /usr/local/include/
-COPY --from=builder-yices /usr/local/lib/libyices* /usr/local/lib/
-COPY --from=builder-yices /usr/local/bin/yices* /usr/local/bin/
+# Copy built artifacts from builder
+COPY --from=builder /usr/local/bin/minisat /usr/local/bin/
+COPY --from=builder /usr/local/lib/libminisat.* /usr/local/lib/
+COPY --from=builder /usr/local/include/minisat /usr/local/include/minisat
+COPY --from=builder /usr/local/bin/stp /usr/local/bin/
+COPY --from=builder /usr/local/lib/libstp.* /usr/local/lib/
+COPY --from=builder /usr/local/bin/yices* /usr/local/bin/
+COPY --from=builder /usr/local/lib/libyices.* /usr/local/lib/
 
 # Update library cache
 RUN ldconfig
 
-# Label the image
-LABEL org.opencontainers.image.source=https://github.com/B-Lang-org/bsc
-LABEL org.opencontainers.image.description="BSC tools (STP and Yices) for Ubuntu 24.04"
-LABEL org.opencontainers.image.licenses=BSD-3-Clause 
+# Labels
+LABEL org.opencontainers.image.description="BSC tools for Ubuntu 24.04"
+LABEL org.opencontainers.image.source="https://github.com/B-Lang-org/bsc" 
