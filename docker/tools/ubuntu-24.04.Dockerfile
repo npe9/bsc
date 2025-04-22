@@ -55,9 +55,8 @@ RUN git clone --depth 1 https://github.com/stp/stp.git && \
 # Build and install Yices
 RUN git clone --depth 1 https://github.com/SRI-CSL/yices2.git && \
     cd yices2 && \
-    autoconf && \
-    ./configure --prefix=/usr/local --enable-gmp && \
     autoreconf -i && \
+    autoconf && \
     ./configure --prefix=/usr/local --enable-gmp && \
     make -j$(nproc) && \
     make install && \
