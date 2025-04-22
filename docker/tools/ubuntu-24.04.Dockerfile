@@ -57,6 +57,8 @@ RUN git clone --depth 1 https://github.com/SRI-CSL/yices2.git && \
     cd yices2 && \
     autoconf && \
     ./configure --prefix=/usr/local && \
+    autoreconf -i && \
+    ./configure --prefix=/usr/local && \
     make -j$(nproc) && \
     make install && \
     cd .. && \
