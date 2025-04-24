@@ -35,13 +35,32 @@ COPY . .
 
 # Initialize and update submodules with caching
 RUN --mount=type=cache,target=/build/.git/modules \
+    git config --global --add safe.directory /build && \
+    git config --global --add safe.directory /build/src/vendor/stp && \
     git submodule sync --recursive && \
     git submodule update --init --force --recursive --depth=1
+
+# Build STP with caching
+RUN --mount=type=cache,target=/ccache \
+    echo "Building STP..." && \
+    cd src/vendor/stp && \
+    echo "Contents of /build/src/vendor/stp:" && \
+    ls -la && \
+    make CFLAGS="-O3 -fPIC" CXXFLAGS="-O3 -fPIC" LDFLAGS="-fPIC" && \
+    make install && \
+    ldconfig
 
 # Build BSC with caching
 RUN --mount=type=cache,target=/ccache \
     --mount=type=cache,target=/build/inst \
-    make -j3 GHCJOBS=2 GHCRTSFLAGS='+RTS -M5G -A128m -RTS' install-src
+    cd /build && \
+    echo "Building and installing BSC..." && \
+    cd src && \
+    make -j3 GHCJOBS=2 GHCRTSFLAGS='+RTS -M5G -A128m -RTS' install-src && \
+    echo "Verifying installed binaries:" && \
+    ls -l /build/inst/bin && \
+    echo "Verifying installed libraries:" && \
+    ls -l /build/inst/lib/Libraries
 
 # Create runtime image
 ARG UBUNTU_VERSION
@@ -56,13 +75,18 @@ RUN apt-get update && \
     libelf1 \
     && rm -rf /var/lib/apt/lists/*
 
+# Create necessary directories
+RUN mkdir -p /usr/local/lib/BSC /usr/local/lib/tcllib
+
 # Copy built files from builder
-COPY --from=builder /build/inst /opt/bluespec/
-COPY --from=builder /usr/local/lib /usr/local/lib
-COPY --from=builder /usr/local/bin /usr/local/bin
+COPY --from=builder /build/inst/bin/* /usr/local/bin/
+COPY --from=builder /build/inst/lib/Libraries/* /usr/local/lib/BSC/
+COPY --from=builder /build/inst/lib/tcllib/* /usr/local/lib/tcllib/
+COPY --from=builder /usr/local/lib/libstp.so* /usr/local/lib/
+COPY --from=builder /usr/local/lib/libyices.so* /usr/local/lib/
 
 # Set PATH and LD_LIBRARY_PATH
-ENV PATH=/opt/bluespec/bin:$PATH \
+ENV PATH=/usr/local/bin:$PATH \
     LD_LIBRARY_PATH=/usr/local/lib:$LD_LIBRARY_PATH
 
 # Label the image
