@@ -1,0 +1,141 @@
+# BSC Dockerfile template
+# Supports multiple GHC versions and Ubuntu releases
+
+# Global ARGs that can be used in any stage
+ARG GHC_VERSION
+ARG UBUNTU_VERSION
+ARG CABAL_VERSION
+ARG MAKE_JOBS
+ARG GHCRTS_MEMORY
+
+# Builder stage
+FROM ubuntu:${UBUNTU_VERSION} AS base
+
+# Install common dependencies
+RUN apt-get update && \
+    DEBIAN_FRONTEND=noninteractive apt-get install -y \
+    build-essential \
+    git \
+    && rm -rf /var/lib/apt/lists/*
+
+# Tools builder stage
+FROM base AS tools-builder
+
+# Install GHC and Cabal
+RUN apt-get update && \
+    DEBIAN_FRONTEND=noninteractive apt-get install -y \
+    curl \
+    && curl --proto '=https' --tlsv1.2 -sSf https://get-ghcup.haskell.org | \
+       BOOTSTRAP_HASKELL_NONINTERACTIVE=1 \
+       BOOTSTRAP_HASKELL_NO_UPGRADE=1 \
+       BOOTSTRAP_HASKELL_MINIMAL=1 \
+       GHC_VERSION=${GHC_VERSION} \
+       CABAL_VERSION=${CABAL_VERSION} sh \
+    && rm -rf /var/lib/apt/lists/*
+
+# BSC builder stage
+FROM tools-builder AS bsc-builder
+
+# Set build flags
+ENV MAKEFLAGS="-j${MAKE_JOBS}"
+ENV CFLAGS="-O2"
+ENV CXXFLAGS="-O2"
+ENV GHCRTSFLAGS="+RTS -M${GHCRTS_MEMORY} -A128m -RTS"
+
+# Install BSC build dependencies
+RUN apt-get update && \
+    DEBIAN_FRONTEND=noninteractive apt-get install -y \
+    autoconf \
+    bison \
+    clang \
+    flex \
+    gawk \
+    gperf \
+    libfontconfig1-dev \
+    libghc-regex-compat-dev \
+    libghc-syb-dev \
+    libgmp-dev \
+    libtinfo-dev \
+    python3 \
+    tcl-dev \
+    tcl \
+    tcllib \
+    && cabal update \
+    && cabal v1-install old-time regex-compat split syb \
+    && ghc-pkg recache \
+    && rm -rf /var/lib/apt/lists/* /root/.cabal/packages
+
+WORKDIR /build/bsc
+
+# Copy source files and initialize submodules
+COPY . .
+RUN git config --global --add safe.directory /build/bsc && \
+    git config --global --add safe.directory /build/bsc/src/vendor/stp && \
+    git submodule update --init --recursive -v
+
+# Build and install STP with caching
+RUN --mount=type=cache,target=/build/stp/obj \
+    cd /build/bsc/src/vendor/stp && \
+    make clean && \
+    make && \
+    mkdir -p /usr/local/lib && \
+    cp lib/libstp.so* /usr/local/lib/ && \
+    ldconfig
+
+# Build BSC and install all components with caching
+RUN --mount=type=cache,target=/build/bsc/obj \
+    cd /build/bsc/src && \
+    make install && \
+    mkdir -p /usr/local/lib/BSC /usr/local/lib/tcllib && \
+    cp -v /build/bsc/inst/bin/bsc* /usr/local/bin/ && \
+    cp -v /build/bsc/inst/bin/bluetcl /usr/local/bin/ && \
+    cp -rv /build/bsc/inst/lib/Libraries/* /usr/local/lib/BSC/ && \
+    cp -rv /usr/share/tcltk/tcllib* /usr/local/lib/tcllib/
+
+# Runtime stage
+FROM ubuntu:${UBUNTU_VERSION} AS runtime
+
+# Re-declare ARGs for labels
+ARG GHC_VERSION
+ARG UBUNTU_VERSION
+
+# Install runtime dependencies
+RUN apt-get update && \
+    DEBIAN_FRONTEND=noninteractive apt-get install -y \
+    ghc \
+    cabal-install \
+    libgmp10 \
+    zlib1g \
+    tcl \
+    tcllib \
+    && cabal update \
+    && cabal v1-install old-time regex-compat split syb \
+    && ghc-pkg recache \
+    && rm -rf /var/lib/apt/lists/* /root/.cabal/packages \
+    && mkdir -p /usr/local/lib/BSC /usr/local/lib/tcllib
+
+# Copy built files from builder stage (minimized layers)
+COPY --from=bsc-builder \
+    /usr/local/lib/libgmp.so* \
+    /usr/local/lib/libstp.so* \
+    /usr/local/lib/libyices.so* \
+    /usr/local/lib/
+COPY --from=bsc-builder \
+    /usr/local/bin/bsc* \
+    /usr/local/bin/bluetcl \
+    /usr/local/bin/
+COPY --from=bsc-builder \
+    /usr/local/lib/tcllib/* \
+    /usr/local/lib/BSC/* \
+    /usr/local/lib/
+
+# Set environment variables
+ENV PATH="/usr/local/bin:${PATH}" \
+    LD_LIBRARY_PATH="/usr/local/lib"
+
+# Add labels
+LABEL org.opencontainers.image.source=https://github.com/B-Lang-org/bsc
+LABEL org.opencontainers.image.description="BSC built with GHC ${GHC_VERSION} on Ubuntu ${UBUNTU_VERSION}"
+LABEL org.opencontainers.image.licenses=BSD-3-Clause
+
+CMD ["bash"] 
