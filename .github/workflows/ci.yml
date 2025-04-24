@@ -4,214 +4,206 @@ name: CI
 on: [ push, pull_request ]
 
 jobs:
+  # Wait for Docker images to be built
+  wait-for-docker:
+    name: "Wait for Docker images"
+    runs-on: ubuntu-latest
+    steps:
+      - name: Wait for Docker build
+        uses: lewagon/wait-on-check-action@v1.3.1
+        with:
+          ref: ${{ github.ref }}
+          check-name: 'Build Docker Images'
+          repo-token: ${{ secrets.GITHUB_TOKEN }}
+          wait-interval: 10
+      - name: Wait for Docker tools build
+        uses: lewagon/wait-on-check-action@v1.3.1
+        with:
+          ref: ${{ github.ref }}
+          check-name: 'Build and Push Docker Tools'
+          repo-token: ${{ secrets.GITHUB_TOKEN }}
+          wait-interval: 10
 
   # ------------------------------
   # Basic linting requirements for new commits
-
   build-check-src:
     name: "Check: code cleanliness"
-    runs-on: ubuntu-24.04
+    needs: [wait-for-docker]
+    runs-on: ubuntu-latest
+    container:
+      image: ghcr.io/${{ github.repository }}:ubuntu-24.04-ghc-9.6.7
+      credentials:
+        username: ${{ github.actor }}
+        password: ${{ secrets.GITHUB_TOKEN }}
+    permissions:
+      contents: read
+      packages: read
     timeout-minutes: 15
     steps:
       - uses: actions/checkout@v4
-      - name: Check tabs and whitespace
-        shell: bash
-        run: ".github/workflows/check_whitespace.sh"
+      - name: Configure Git safe directory
+        run: git config --global --add safe.directory /__w/bsc/bsc
+      - name: Fix CONFDIR paths
+        run: fix_confdir.sh
+      - name: Check code
+        run: check_code.sh
 
   build-check-testsuite:
     name: "Check: testsuite lint"
-    runs-on: ubuntu-24.04
+    needs: [wait-for-docker]
+    runs-on: ubuntu-latest
+    container:
+      image: ghcr.io/${{ github.repository }}:ubuntu-24.04-ghc-9.6.7
+      credentials:
+        username: ${{ github.actor }}
+        password: ${{ secrets.GITHUB_TOKEN }}
+    permissions:
+      contents: read
+      packages: read
     timeout-minutes: 15
     steps:
       - uses: actions/checkout@v4
-      - name: Check CONFDIR
+      - name: Configure Git safe directory
+        run: git config --global --add safe.directory /__w/bsc/bsc
+      - name: Fix CONFDIR paths
+        run: fix_confdir.sh
+      - name: Check testsuite
         run: |
           cd testsuite
-          ../.github/workflows/check_confdir.py
-          ../.github/workflows/check_symlinks.py
+          check_code.sh
 
   # ------------------------------
   # Builds for release, using a reliable and stable version of GHC
-
   build-and-test-ubuntu:
+    name: "Build/Test: ubuntu-${{ matrix.os }}"
+    needs: [wait-for-docker, build-check-src, build-check-testsuite]
+    runs-on: ubuntu-latest
+    container:
+      image: ghcr.io/${{ github.repository }}:ubuntu-${{ matrix.os }}-ghc-9.6.7
+      credentials:
+        username: ${{ github.actor }}
+        password: ${{ secrets.GITHUB_TOKEN }}
+    permissions:
+      contents: read
+      packages: read
     strategy:
       matrix:
-        os: [ ubuntu-22.04, ubuntu-24.04 ]
+        os: [ '22.04', '24.04' ]
       fail-fast: false
-    name: "Build/Test: ${{ matrix.os }}"
-    uses: ./.github/workflows/build-and-test-ubuntu.yml
-    with:
-      os: ${{ matrix.os }}
-      ghc_version: 9.6.7
-      hls_version: 2.10.0.0
-    secrets: inherit
-
-  build-and-test-macos:
-    strategy:
-      matrix:
-        os: [ macos-13, macos-14, macos-15 ]
-      fail-fast: false
-    name: "Build/Test: ${{ matrix.os }}"
-    uses: ./.github/workflows/build-and-test-macos.yml
-    with:
-      os: ${{ matrix.os }}
-      ghc_version: 9.6.7
-      hls_version: 2.10.0.0
-    secrets: inherit
+    steps:
+      - uses: actions/checkout@v4
+      - name: Configure Git safe directory
+        run: git config --global --add safe.directory /__w/bsc/bsc
+      - name: Build
+        env:
+          CCACHE_DIR: /ccache
+        run: |
+          ccache --zero-stats --max-size 250M
+          export PATH=/usr/lib/ccache:$PATH
+          make -j3 GHCJOBS=2 GHCRTSFLAGS='+RTS -M5G -A128m -RTS' install-src
+          tar czf inst.tar.gz inst
+      - name: CCache stats
+        env:
+          CCACHE_DIR: /ccache
+        run: ccache --show-stats
+      - name: Smoketest
+        run: "make check-smoke"
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: ubuntu-${{ matrix.os }} build
+          path: inst.tar.gz
 
   # ------------------------------
-  # Tests using other recent versions of GHC, particularly newer ones,
-  # in anticipation of upgrading the release builds to that version
-
+  # Tests using other recent versions of GHC
   build-and-test-ghc-ubuntu:
-    strategy:
-      matrix:
-        ghc:
-          - version: 9.4.8
-            hls: 2.10.0.0
-          - version: 9.8.4
-            hls: 2.10.0.0
-          - version: 9.10.1
-            hls: 2.10.0.0
-          - version: 9.12.2
-            hls: 2.10.0.0
-      fail-fast: false
     name: "Build/Test: GHC Ubuntu"
-    uses: ./.github/workflows/build-and-test-ubuntu.yml
-    with:
-      os: ubuntu-22.04
-      ghc_version: ${{ matrix.ghc.version }}
-      hls_version: ${{ matrix.ghc.hls }}
-    secrets: inherit
-
-  build-and-test-ghc-macos:
+    needs: [wait-for-docker, build-check-src, build-check-testsuite]
+    runs-on: ubuntu-latest
+    container:
+      image: ghcr.io/${{ github.repository }}:ubuntu-22.04-ghc-${{ matrix.ghc.version }}
+      credentials:
+        username: ${{ github.actor }}
+        password: ${{ secrets.GITHUB_TOKEN }}
+    permissions:
+      contents: read
+      packages: read
     strategy:
       matrix:
         ghc:
-          - version: 9.4.8
-            hls: 2.10.0.0
-          - version: 9.8.4
-            hls: 2.10.0.0
-          - version: 9.10.1
-            hls: 2.10.0.0
-          - version: 9.12.2
-            hls: 2.10.0.0
+          - version: '9.4.8'
+            hls: '2.10.0.0'
+          - version: '9.8.4'
+            hls: '2.10.0.0'
+          - version: '9.10.1'
+            hls: '2.10.0.0'
+          - version: '9.12.2'
+            hls: '2.10.0.0'
       fail-fast: false
-    name: "Build/Test: GHC macOS"
-    uses: ./.github/workflows/build-and-test-macos.yml
-    with:
-      os: macos-14
-      ghc_version: ${{ matrix.ghc.version }}
-      hls_version: ${{ matrix.ghc.hls }}
-    secrets: inherit
+    steps:
+      - uses: actions/checkout@v4
+      - name: Configure Git safe directory
+        run: git config --global --add safe.directory /__w/bsc/bsc
+      - name: Build
+        env:
+          CCACHE_DIR: /ccache
+        run: |
+          ccache --zero-stats --max-size 250M
+          export PATH=/usr/lib/ccache:$PATH
+          make -j3 GHCJOBS=2 GHCRTSFLAGS='+RTS -M5G -A128m -RTS' install-src
+          tar czf inst.tar.gz inst
+      - name: CCache stats
+        env:
+          CCACHE_DIR: /ccache
+        run: ccache --show-stats
+      - name: Smoketest
+        run: "make check-smoke"
+      - name: Test Haskell Language Server
+        if: ${{ matrix.ghc.hls != '' }}
+        run: |
+          python3 util/haskell-language-server/gen_hie.py
+          pushd src/comp
+          haskell-language-server-${{ matrix.ghc.version }} bsc.hs
+          popd
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: ubuntu-22.04-ghc-${{ matrix.ghc.version }} build
+          path: inst.tar.gz
 
   # ------------------------------
   # Test the building of documentation
-
   build-doc-ubuntu:
+    name: "Build doc: ubuntu-${{ matrix.os }}"
+    needs: [wait-for-docker, build-check-src, build-check-testsuite]
+    runs-on: ubuntu-latest
+    container:
+      image: ghcr.io/${{ github.repository }}:ubuntu-${{ matrix.os }}-ghc-9.6.7
+      credentials:
+        username: ${{ github.actor }}
+        password: ${{ secrets.GITHUB_TOKEN }}
+    permissions:
+      contents: read
+      packages: read
     strategy:
       matrix:
-        os: [ ubuntu-22.04, ubuntu-24.04 ]
+        os: [ '22.04', '24.04' ]
       fail-fast: false
-    name: "Build doc: ${{ matrix.os }}"
-    runs-on: ${{ matrix.os }}
-    timeout-minutes: 15
     steps:
       - uses: actions/checkout@v4
-      - name: Install dependencies
-        shell: bash
-        run: "sudo .github/workflows/install_dependencies_doc_ubuntu.sh"
+      - name: Configure Git safe directory
+        run: git config --global --add safe.directory /__w/bsc/bsc
       - name: Build
         run: |
           make -j3 install-doc
           tar czf inst.tar.gz inst
-      # The next two actions upload the PDFs as an artifact that can be downloaded.
-      # We provide two versions: one for release packaging and one for users.
-      # This is because the GitHub download will provide the artifact as a zip-file,
-      # even if the artifact itself is just one file:
-      #   https://github.com/actions/upload-artifact/issues/3
-      #   https://github.com/actions/upload-artifact/issues/14
-      # It is inconvenient for users to access PDFs inside a tarfile inside a zipfile,
-      # therefore we provide an option without the tarfile layer.
       - name: Upload artifact
-        # This artifact (PDFs inside inst.tar.gz inside artifact.zip) is for release packaging.
         uses: actions/upload-artifact@v4
         with:
-          name: ${{ matrix.os }} build doc
+          name: ubuntu-${{ matrix.os }} build doc
           path: inst.tar.gz
       - name: Upload doc not tar
-        # This artifact (PDFs inside artifact.zip) is for viewing the built documents.
         uses: actions/upload-artifact@v4
         with:
-          name: ${{matrix.os}}-doc-not-tar
+          name: ubuntu-${{ matrix.os }}-doc-not-tar
           path: inst/doc
-
-  build-doc-macOS:
-    strategy:
-      matrix:
-        os: [ macos-13, macos-14, macos-15 ]
-      fail-fast: false
-    name: "Build doc: ${{ matrix.os }}"
-    runs-on: ${{ matrix.os }}
-    timeout-minutes: 60
-    steps:
-      - uses: actions/checkout@v4
-      - name: Install dependencies
-        shell: bash
-        run: ".github/workflows/install_dependencies_doc_macos.sh"
-      - name: Build
-        run: |
-          # Brew install of mactex doesn't update the path until a new shell is opened
-          export PATH=/Library/TeX/texbin/:$PATH
-
-          make -j3 install-doc
-          tar czf inst.tar.gz inst
-      # The next two actions upload the PDFs as an artifact that can be downloaded.
-      # We provide two versions: one for release packaging and one for users.
-      # This is because the GitHub download will provide the artifact as a zip-file,
-      # even if the artifact itself is just one file:
-      #   https://github.com/actions/upload-artifact/issues/3
-      #   https://github.com/actions/upload-artifact/issues/14
-      # It is inconvenient for users to access PDFs inside a tarfile inside a zipfile,
-      # therefore we provide an option without the tarfile layer.
-      - name: Upload artifact
-        # This artifact (PDFs inside inst.tar.gz inside artifact.zip) is for release packaging.
-        uses: actions/upload-artifact@v4
-        with:
-          name: ${{ matrix.os }} build doc
-          path: inst.tar.gz
-      - name: Upload doc not tar
-        # This artifact (PDFs inside artifact.zip) is for viewing the built documents.
-        uses: actions/upload-artifact@v4
-        with:
-          name: ${{matrix.os}}-doc-not-tar
-          path: inst/doc
-
-  # ------------------------------
-  # Build platform-generic documents for releases
-
-  build-releasenotes-ubuntu:
-    # Release Notes only need to be built once, so we build on recent
-    # Ubuntu, not Mac OS.  Later, the release script will copy the
-    # generated release notes to all release tarballs.
-    strategy:
-      matrix:
-        os: [ ubuntu-22.04 ]
-      fail-fast: false
-    name: "Build releasenotes: ${{ matrix.os }}"
-    runs-on: ${{ matrix.os }}
-    timeout-minutes: 15
-    steps:
-      - uses: actions/checkout@v4
-      - name: Install dependencies
-        shell: bash
-        run: "sudo .github/workflows/install_dependencies_releasenotes_ubuntu.sh"
-      - name: Build
-        run: |
-          make install-release
-          tar czf inst.tar.gz inst
-      - name: Upload artifact
-        uses: actions/upload-artifact@v4
-        with:
-          name: ${{ matrix.os }} releasenotes
-          path: inst.tar.gz
