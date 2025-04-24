@@ -1,6 +1,13 @@
+# Global ARGs that can be used in any stage
 ARG GHC_VERSION
+ARG UBUNTU_VERSION
+ARG HLS_VERSION
+ARG BASE_IMAGE
+
+# Builder stage
 FROM haskell:${GHC_VERSION}-slim-bullseye AS builder
 
+# Re-declare ARGs that need to be used in this stage
 ARG HLS_VERSION
 
 # Install system dependencies
@@ -62,9 +69,12 @@ RUN --mount=type=cache,target=/ccache \
     echo "Verifying installed libraries:" && \
     ls -l /build/inst/lib/Libraries
 
-# Create runtime image
-ARG UBUNTU_VERSION
+# Runtime stage
 FROM ubuntu:${UBUNTU_VERSION}
+
+# Re-declare ARGs that need to be used in this stage
+ARG UBUNTU_VERSION
+ARG GHC_VERSION
 
 # Install runtime dependencies
 RUN apt-get update && \
