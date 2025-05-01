@@ -68,20 +68,8 @@ jobs:
 
   # ------------------------------
   # Ubuntu jobs
-  ubuntu:
-    name: Ubuntu
-    runs-on: ubuntu-latest
-    needs: []
-    steps:
-    - name: Checkout
-      uses: actions/checkout@v4
-    - name: Setup
-      run: echo "Starting Ubuntu jobs"
-
-  # Ubuntu build jobs
   ubuntu-build:
     name: Build (Ubuntu ${{ matrix.os_version }}, GHC ${{ matrix.ghc_version }})
-    needs: ubuntu
     runs-on: ubuntu-${{ matrix.os_version }}
     timeout-minutes: 60
     env:
@@ -401,20 +389,8 @@ jobs:
 
   # ------------------------------
   # macOS jobs
-  macos:
-    name: macOS
-    runs-on: macos-latest
-    needs: []
-    steps:
-    - name: Checkout
-      uses: actions/checkout@v4
-    - name: Setup
-      run: echo "Starting macOS jobs"
-
-  # macOS build jobs
   macos-build:
     name: Build (macOS ${{ matrix.os_version }}, GHC ${{ matrix.ghc_version }})
-    needs: macos
     runs-on: macos-${{ matrix.os_version }}
     timeout-minutes: 60
     env:
