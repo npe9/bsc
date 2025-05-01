@@ -183,8 +183,9 @@ jobs:
           -e GHCJOBS=${{ env.GHCJOBS }} \
           -e CABAL_JOBS=${{ env.CABAL_JOBS }} \
           -e MAKE_JOBS=${{ env.MAKE_JOBS }} \
+          -e CABAL_DIR=/opt/cabal-store \
           ghcr.io/${{ github.repository }}/ubuntu-${{ matrix.os_version }}:${{ matrix.ghc_version }} \
-          bash -c "cabal update && cabal build ${{ env.CABAL_BUILD_OPTIONS }}"
+          bash -c "mkdir -p /opt/cabal-store && cabal user-config init --config-file=/opt/cabal-store/config && cabal update && cabal build ${{ env.CABAL_BUILD_OPTIONS }}"
 
     - name: Upload build artifacts
       uses: actions/upload-artifact@v4
