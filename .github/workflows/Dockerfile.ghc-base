@@ -1,0 +1,87 @@
+# Base image for GHC development
+ARG GHC_VERSION
+ARG UBUNTU_VERSION=20.04
+FROM ubuntu:${UBUNTU_VERSION}
+
+# Set environment variables
+ENV DEBIAN_FRONTEND=noninteractive
+ENV LANG=C.UTF-8
+ENV LC_ALL=C.UTF-8
+ENV TZ=UTC
+
+# Set up geographic area and timezone
+RUN apt-get update && apt-get install -y tzdata && \
+    ln -fs /usr/share/zoneinfo/$TZ /etc/localtime && \
+    dpkg-reconfigure -f noninteractive tzdata
+
+# Install system dependencies
+RUN apt-get update && apt-get install -y \
+    build-essential \
+    curl \
+    libffi-dev \
+    libffi7 \
+    libgmp-dev \
+    libgmp10 \
+    libncurses5-dev \
+    libncurses5 \
+    libtinfo-dev \
+    libtinfo5 \
+    zlib1g-dev \
+    pkg-config \
+    && rm -rf /var/lib/apt/lists/*
+
+# Create cabal config directory
+RUN mkdir -p /opt/cabal-store/config && \
+    touch /opt/cabal-store/config/config
+
+# Install GHCup and GHC
+RUN curl --proto '=https' --tlsv1.2 -sSf https://get-ghcup.haskell.org | \
+    BOOTSTRAP_HASKELL_NONINTERACTIVE=1 \
+    BOOTSTRAP_HASKELL_GHC_VERSION=${GHC_VERSION} \
+    BOOTSTRAP_HASKELL_CABAL_VERSION=latest \
+    sh
+
+# Configure cabal
+RUN mkdir -p /root/.cabal && \
+    echo "repository hackage.haskell.org" > /root/.cabal/config && \
+    echo "  url: https://hackage.haskell.org/" >> /root/.cabal/config && \
+    echo "  secure: True" >> /root/.cabal/config && \
+    echo "  root-keys:" >> /root/.cabal/config && \
+    echo "    fe331502606802feac15e514d9b9ea83fee8b6ffef71335479a2e68d84adc6b0" >> /root/.cabal/config && \
+    echo "    1ea9ba32c526d1cc91ab5c5ca2ecb9f0b0d0f0c9f9a9a9a9a9a9a9a9a9a9a9a9a" >> /root/.cabal/config && \
+    echo "    2c6c3627bd6c982990239487f1abd02e08a02e6cf16edb105a8012d444d870c3" >> /root/.cabal/config && \
+    echo "    f76d08be13e9a61a377a85e2fb63f4c5435d40f8feb3e12d059fa5b6f2534e2b" >> /root/.cabal/config && \
+    echo "    cabal-install-3.6.2.0" >> /root/.cabal/config
+
+# Install and register required packages
+RUN . /root/.ghcup/env && \
+    cabal update && \
+    # Install old-locale
+    cabal install --lib old-locale && \
+    ghc-pkg register $(find /root/.cabal/store/ghc-${GHC_VERSION}* -name "old-locale-*.conf") && \
+    # Install old-time
+    cabal install --lib old-time && \
+    ghc-pkg register $(find /root/.cabal/store/ghc-${GHC_VERSION}* -name "old-time-*.conf") && \
+    # Install regex-base
+    cabal install --lib regex-base && \
+    ghc-pkg register $(find /root/.cabal/store/ghc-${GHC_VERSION}* -name "regex-base-*.conf") && \
+    # Install regex-posix
+    cabal install --lib regex-posix && \
+    ghc-pkg register $(find /root/.cabal/store/ghc-${GHC_VERSION}* -name "regex-posix-*.conf") && \
+    # Install regex-compat
+    cabal install --lib regex-compat && \
+    ghc-pkg register $(find /root/.cabal/store/ghc-${GHC_VERSION}* -name "regex-compat-*.conf") && \
+    # Install split
+    cabal install --lib split && \
+    ghc-pkg register $(find /root/.cabal/store/ghc-${GHC_VERSION}* -name "split-*.conf") && \
+    # Install syb
+    cabal install --lib syb && \
+    ghc-pkg register $(find /root/.cabal/store/ghc-${GHC_VERSION}* -name "syb-*.conf") && \
+    # Verify installation
+    ghc-pkg list
+
+# Set working directory
+WORKDIR /work
+
+# Default command
+CMD ["bash"] 

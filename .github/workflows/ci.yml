@@ -10,7 +10,7 @@ env:
   DOCKER_BUILDKIT: 1
 
 jobs:
-  test:
+  build-images:
     runs-on: ubuntu-latest
     strategy:
       matrix:
@@ -31,13 +31,80 @@ jobs:
             ubuntu-version: 22.04
 
     steps:
-    - uses: actions/checkout@v4
+    - uses: actions/checkout@v2
 
     - name: Set up Docker Buildx
-      uses: docker/setup-buildx-action@v3
+      uses: docker/setup-buildx-action@v1
 
     - name: Log in to GitHub Container Registry
-      uses: docker/login-action@v3
+      uses: docker/login-action@v1
+      with:
+        registry: ghcr.io
+        username: ${{ github.actor }}
+        password: ${{ secrets.GITHUB_TOKEN }}
+
+    - name: Build and push GHC base image
+      uses: docker/build-push-action@v2
+      with:
+        context: .
+        file: .github/workflows/Dockerfile.ghc-base
+        push: true
+        tags: ghcr.io/npe9/bsc-ghc-base-${{ matrix.ghc-version }}-${{ matrix.ubuntu-version }}
+        build-args: |
+          GHC_VERSION=${{ matrix.ghc-version }}
+          UBUNTU_VERSION=${{ matrix.ubuntu-version }}
+
+    - name: Build and push builder image
+      uses: docker/build-push-action@v2
+      with:
+        context: .
+        file: .github/workflows/Dockerfile.bsc-builder
+        push: true
+        tags: ghcr.io/npe9/bsc-builder-${{ matrix.ghc-version }}-${{ matrix.ubuntu-version }}
+        build-args: |
+          GHC_VERSION=${{ matrix.ghc-version }}
+          UBUNTU_VERSION=${{ matrix.ubuntu-version }}
+
+    - name: Build and push runtime image
+      uses: docker/build-push-action@v2
+      with:
+        context: .
+        file: .github/workflows/Dockerfile.bsc-runtime
+        push: true
+        tags: ghcr.io/npe9/bsc-runtime-${{ matrix.ghc-version }}-${{ matrix.ubuntu-version }}
+        build-args: |
+          GHC_VERSION=${{ matrix.ghc-version }}
+          UBUNTU_VERSION=${{ matrix.ubuntu-version }}
+
+  test:
+    needs: build-images
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        ghc-version: [9.2.8, 9.4.8, 9.6.6, 9.8.4, 9.10.1, 9.12.1]
+        ubuntu-version: [20.04, 22.04]
+        exclude:
+          - ghc-version: 9.12.1
+            ubuntu-version: 20.04
+          - ghc-version: 9.10.1
+            ubuntu-version: 20.04
+          - ghc-version: 9.8.4
+            ubuntu-version: 20.04
+          - ghc-version: 9.6.6
+            ubuntu-version: 20.04
+          - ghc-version: 9.4.8
+            ubuntu-version: 20.04
+          - ghc-version: 9.2.8
+            ubuntu-version: 22.04
+
+    steps:
+    - uses: actions/checkout@v2
+
+    - name: Set up Docker Buildx
+      uses: docker/setup-buildx-action@v1
+
+    - name: Log in to GitHub Container Registry
+      uses: docker/login-action@v1
       with:
         registry: ghcr.io
         username: ${{ github.actor }}
@@ -63,7 +130,7 @@ jobs:
 
     - name: Save test logs
       if: always()
-      uses: actions/upload-artifact@v4
+      uses: actions/upload-artifact@v2
       with:
         name: test-logs-${{ matrix.ghc-version }}-${{ matrix.ubuntu-version }}
         path: |

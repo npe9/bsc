@@ -1,8 +1,9 @@
 ARG GHC_VERSION=9.2.8
+ARG UBUNTU_VERSION=20.04
 FROM ghcr.io/npe9/bsc-builder-${GHC_VERSION}
 
 # Runtime stage
-FROM ubuntu:20.04
+FROM ubuntu:${UBUNTU_VERSION}
 
 # Set timezone
 ENV TZ=UTC
