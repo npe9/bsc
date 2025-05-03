@@ -12,6 +12,7 @@ RUN apt-get update && \
     g++ \
     gcc \
     git \
+    gperf \
     iverilog \
     libgmp-dev \
     libncurses-dev \
