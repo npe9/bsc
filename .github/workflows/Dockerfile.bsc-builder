@@ -1,10 +1,7 @@
-# Builder stage for BSC
-ARG GHC_VERSION=9.2.8
-FROM ghcr.io/npe9/bsc-ghc-base-${GHC_VERSION}
+FROM bsc-ghc-base-9.2.8
 
 # Install build dependencies
-RUN apt-get update && \
-    DEBIAN_FRONTEND=noninteractive apt-get install -y \
+RUN apt-get update && apt-get install -y \
     autoconf \
     bison \
     ccache \
@@ -21,22 +18,19 @@ RUN apt-get update && \
     python3 \
     python3-pip \
     python3-venv \
+    tcl \
+    tcl-dev \
     && rm -rf /var/lib/apt/lists/*
 
-# Set up ccache directory
-RUN mkdir -p /work/.ccache && \
-    chmod 777 /work/.ccache
+# Set up working directory
+WORKDIR /work
 
-# Create and set working directory
-WORKDIR /work/bsc
-RUN git clone --recursive https://github.com/B-Lang-org/bsc .
+# Copy BSC source code
+COPY . .
 
 # Build BSC
 RUN . /root/.ghcup/env && \
     make install-src PREFIX=/work/inst
 
-# Add BSC to PATH
-ENV PATH="/work/inst/bin:${PATH}"
-
-# Set default command
-CMD ["bash"] 
+# Add BSC binaries to PATH
+ENV PATH="/work/inst/bin:${PATH}" 
