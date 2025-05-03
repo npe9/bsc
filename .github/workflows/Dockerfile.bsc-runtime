@@ -1,0 +1,28 @@
+ARG GHC_VERSION=9.2.8
+FROM ghcr.io/npe9/bsc-builder-${GHC_VERSION}
+
+# Runtime stage
+FROM ubuntu:20.04
+
+# Set timezone
+ENV TZ=UTC
+RUN ln -snf /usr/share/zoneinfo/$TZ /etc/localtime && echo $TZ > /etc/timezone
+
+# Install runtime dependencies
+RUN apt-get update && \
+    DEBIAN_FRONTEND=noninteractive apt-get install -y \
+    iverilog \
+    make \
+    && rm -rf /var/lib/apt/lists/*
+
+# Copy BSC installation from builder stage
+COPY --from=builder /work/inst /opt/bluespec/
+
+# Set working directory
+WORKDIR /work
+
+# Add BSC binaries to PATH
+ENV PATH="/work/inst/bin:${PATH}"
+
+# Set default command
+CMD ["bash"] 

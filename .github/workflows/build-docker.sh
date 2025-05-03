@@ -41,10 +41,6 @@ build_docker_images() {
                  -t ghcr.io/npe9/bsc-builder-${GHC_VERSION} \
                  -f .github/workflows/Dockerfile.bsc-builder .
 
-    # Run smoke tests in builder image
-    print_status "Running smoke tests in builder image"
-    docker run --rm ghcr.io/npe9/bsc-builder-${GHC_VERSION} make -C /work/bsc/examples/smoke_test check-smoke
-
     # Build runtime image
     print_status "Building runtime image"
     docker build --build-arg GHC_VERSION=${GHC_VERSION} \
@@ -56,6 +52,13 @@ build_docker_images() {
     docker push ghcr.io/npe9/bsc-ghc-base-${GHC_VERSION}
     docker push ghcr.io/npe9/bsc-builder-${GHC_VERSION}
     docker push ghcr.io/npe9/bsc-runtime-${GHC_VERSION}-${UBUNTU_VERSION}
+
+    # Run smoke tests
+    print_status "Running smoke tests"
+    docker run --rm \
+      -v $(pwd):/work \
+      ghcr.io/npe9/bsc-runtime-${GHC_VERSION}-${UBUNTU_VERSION} \
+      bash -c 'cd /work/bsc/examples/smoke_test && make check-smoke'
 
     print_success "Build completed successfully for GHC ${GHC_VERSION} on Ubuntu ${UBUNTU_VERSION}"
 }
