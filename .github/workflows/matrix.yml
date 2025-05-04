@@ -2,7 +2,7 @@ name: Matrix Build and Test
 
 on:
   push:
-    branches: [ main ]
+    branches: [ main, runner-matrix ]
     paths:
       - '**.hs'
       - '**.cabal'
