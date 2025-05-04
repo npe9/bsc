@@ -1,12 +1,11 @@
 FROM ubuntu:24.04 as build
 
-# Set timezone to avoid prompts
+# Set environment variables
+ENV DEBIAN_FRONTEND=noninteractive
 ENV TZ=UTC
-RUN ln -snf /usr/share/zoneinfo/$TZ /etc/localtime && echo $TZ > /etc/timezone
 
-# Copy source code and install dependencies
-COPY . /build/
-WORKDIR /build
+# Set timezone
+RUN ln -snf /usr/share/zoneinfo/UTC /etc/localtime && echo UTC > /etc/timezone
 
 # Install build dependencies
 RUN apt-get update && apt-get install -y \
@@ -21,53 +20,50 @@ RUN apt-get update && apt-get install -y \
     libghc-syb-dev \
     libghc-old-time-dev \
     libghc-split-dev \
-    tcl \
+    tcl-dev \
+    tk-dev \
     itk3-dev \
     autoconf \
     flex \
     bison \
     && rm -rf /var/lib/apt/lists/*
 
-# Initialize git submodules
+# Copy source code
+COPY . /build/
+
+# Set working directory
+WORKDIR /build
+
+# Build steps
 RUN git submodule update --init --recursive
-
-# Set environment variables
-ENV OSTYPE=Linux
-ENV MACHTYPE=x86_64
-ENV CFLAGS="-m64"
-ENV CXXFLAGS="-m64"
-
-# Build the project
 RUN make -C /build -j$(nproc)
-
-# Install binaries
 RUN make -C /build install-src
 
 # Run smoke tests
-RUN make -C /build check-smoke
+RUN make -C /build smoke-tests
 
-# Create final image
+# Final stage
 FROM ubuntu:24.04
 
-# Install runtime dependencies
-RUN apt-get update && DEBIAN_FRONTEND=noninteractive apt-get install -y \
-    build-essential \
-    ghc \
-    git \
-    iverilog \
-    make \
-    pkg-config \
-    python3 \
-    tcl \
-    itk3 \
-    && rm -rf /var/lib/apt/lists/*
-
-# Copy built binaries
-COPY --from=build /usr/local /usr/local
+# Copy installed files from build stage
+COPY --from=build /build/inst /usr/local/
 
 # Set environment variables
-ENV PATH=/usr/local/bin:$PATH
-ENV OSTYPE=Linux
-ENV MACHTYPE=x86_64
+ENV PATH="/usr/local/bin:${PATH}"
+ENV LD_LIBRARY_PATH="/usr/local/lib:${LD_LIBRARY_PATH}"
+
+# Install runtime dependencies
+RUN apt-get update && apt-get install -y \
+    libffi8ubuntu1 \
+    libgmp10 \
+    libncurses5 \
+    libtinfo5 \
+    zlib1g-dev \
+    ccache \
+    git \
+    && rm -rf /var/lib/apt/lists/*
+
+# Set up git configuration
+RUN git config --global --add safe.directory /work
 
 WORKDIR /work 

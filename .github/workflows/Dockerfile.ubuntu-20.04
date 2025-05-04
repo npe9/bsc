@@ -1,73 +1,129 @@
-FROM ubuntu:20.04 as build
-
-# Set timezone to avoid prompts
-ENV TZ=UTC
-RUN ln -snf /usr/share/zoneinfo/$TZ /etc/localtime && echo $TZ > /etc/timezone
-
-# Copy source code and install dependencies
-COPY . /build/
-WORKDIR /build
-
-# Install build dependencies
-RUN apt-get update && apt-get install -y \
-    gcc \
-    g++ \
-    make \
-    git \
-    ghc \
-    gperf \
-    libghc-text-dev \
-    libghc-regex-compat-dev \
-    libghc-syb-dev \
-    libghc-old-time-dev \
-    libghc-split-dev \
-    tcl \
-    itk3-dev \
-    autoconf \
-    flex \
-    bison \
-    && rm -rf /var/lib/apt/lists/*
-
-# Initialize git submodules
-RUN git submodule update --init --recursive
+# Build stage for GHC and tools
+FROM ubuntu:20.04 as ghc-builder
 
 # Set environment variables
-ENV OSTYPE=Linux
-ENV MACHTYPE=x86_64
-ENV CFLAGS="-m64"
-ENV CXXFLAGS="-m64"
+ENV DEBIAN_FRONTEND=noninteractive
+ENV LANG=C.UTF-8
+ENV LC_ALL=C.UTF-8
+ENV GHCUP_INSTALL_BASE_PREFIX=/opt
+ENV PATH="/opt/.ghcup/bin:$PATH"
+ENV CABAL_DIR=/opt/cabal-store
+ENV CABAL_CONFIG=/opt/cabal-store/config
+ENV STACK_ROOT=/opt/stack
 
-# Build the project
-RUN make -C /build -j$(nproc)
+# Install system dependencies
+RUN apt-get update && apt-get install -y \
+    build-essential \
+    curl \
+    libffi-dev \
+    libffi7 \
+    libgmp-dev \
+    libgmp10 \
+    libncurses-dev \
+    libncurses5 \
+    libtinfo5 \
+    libz3-dev \
+    zlib1g-dev \
+    libghc-split-dev \
+    && rm -rf /var/lib/apt/lists/*
 
-# Install binaries
-RUN make -C /build install-src
+# Install GHCup non-interactively
+RUN curl --proto '=https' --tlsv1.2 -sSf https://get-ghcup.haskell.org | BOOTSTRAP_HASKELL_NONINTERACTIVE=1 BOOTSTRAP_HASKELL_NO_UPGRADE=1 BOOTSTRAP_HASKELL_MINIMAL=1 sh
 
-# Run smoke tests
-RUN make -C /build check-smoke
+# Install common GHC versions in parallel
+RUN ghcup install ghc 9.4.8 && \
+    ghcup install ghc 9.6.6 && \
+    ghcup install ghc 9.8.4 && \
+    ghcup install ghc 9.10.1 && \
+    ghcup install ghc 9.12.1 & \
+    wait
 
-# Create final image
+# Install Cabal and Stack
+RUN ghcup install cabal 3.10.2.1 && \
+    ghcup install stack 2.13.1 && \
+    mkdir -p /opt/stack && \
+    stack --version
+
+# Configure Cabal
+RUN mkdir -p /opt/cabal-store && \
+    echo "repository hackage.haskell.org" > /opt/cabal-store/config && \
+    echo "  url: https://hackage.haskell.org/" >> /opt/cabal-store/config && \
+    echo "  secure: True" >> /opt/cabal-store/config && \
+    echo "  root-keys:" >> /opt/cabal-store/config && \
+    echo "  -- 0a5c7ea47cd1b15f01f5f51a33adda7e655bc0f0b0615baa8e5f00e9c5467d24" >> /opt/cabal-store/config && \
+    echo "  -- 1ea9ba32c526d1cc91ab5e5bd364ec5e9e8cb67179a471872f6e26f0ae773d42" >> /opt/cabal-store/config && \
+    echo "  -- 280b10153a522681163658cb49f632cde3f38d768b736ddbc901d99a1a772833" >> /opt/cabal-store/config && \
+    echo "  -- 2a96b1889dc221c17296fcc2bb34b908ca9734376f0f361660200935916ef201" >> /opt/cabal-store/config && \
+    echo "  -- 2c6c3627bd6c982990239487f1abd02e08a02e6cf16edb105a8012d444d870c3" >> /opt/cabal-store/config && \
+    echo "  -- 51f0161b906011b52c6613376b1ae937670da69322113a246a09f807c62fbf1e" >> /opt/cabal-store/config && \
+    echo "  -- 772e9f4c7db33d251d5c6e357199c819e569d130857dc225549b40845ff0890d" >> /opt/cabal-store/config && \
+    echo "  -- aa315286e6ad281ad61182235533c41e806e5a787e0b6d1e7eef3f09d137d2e9" >> /opt/cabal-store/config && \
+    echo "  -- fe331502606802feac15e514d9b9ea83fee8b6ffef71335479a2e68d84adc6b0" >> /opt/cabal-store/config && \
+    echo "  -- ff8895b918a99658c7fda6c097f8d5cb0392f4f5e66b07418509e6c3be3582f2" >> /opt/cabal-store/config
+
+# Pre-download common dependencies
+RUN cabal update && \
+    cabal install --lib --package-env=/opt/cabal-store \
+    aeson async attoparsec base bytestring case-insensitive containers deepseq directory exceptions filepath hashable http-client http-conduit http-types lens mtl network optparse-applicative process random scientific stm streaming text time transformers unix unordered-containers vector wai wai-extra warp
+
+# Final stage
 FROM ubuntu:20.04
 
 # Install runtime dependencies
-RUN apt-get update && DEBIAN_FRONTEND=noninteractive apt-get install -y \
-    build-essential \
-    ghc \
+RUN apt-get update && apt-get install -y \
+    libffi8ubuntu1 \
+    libgmp10 \
+    libncurses5 \
+    libtinfo5 \
+    zlib1g-dev \
+    ccache \
     git \
-    iverilog \
-    make \
-    pkg-config \
-    python3 \
-    tcl \
-    itk3 \
     && rm -rf /var/lib/apt/lists/*
 
-# Copy built binaries
-COPY --from=build /usr/local /usr/local
+# Set up git configuration
+RUN git config --global --add safe.directory /work
 
-# Set environment variables
-ENV PATH=/usr/local/bin:$PATH
-ENV OSTYPE=Linux
-ENV MACHTYPE=x86_64
+# Copy GHC and tools from builder
+COPY --from=ghc-builder /opt/.ghcup /opt/.ghcup
+COPY --from=ghc-builder /opt/cabal-store /opt/cabal-store
+COPY --from=ghc-builder /opt/stack /opt/stack
 
-WORKDIR /work 
+# Set up environment
+ENV PATH="/opt/.ghcup/bin:$PATH"
+ENV DEBIAN_FRONTEND=noninteractive
+ENV LANG=C.UTF-8
+ENV LC_ALL=C.UTF-8
+ENV GHCUP_INSTALL_BASE_PREFIX=/opt
+ENV CABAL_DIR=/opt/cabal-store
+ENV CABAL_CONFIG=/opt/cabal-store/config
+ENV STACK_ROOT=/opt/stack
+ENV CCACHE_DIR=/tmp/ccache
+ENV CCACHE_MAXSIZE=2G
+ENV CCACHE_COMPRESS=1
+ENV CCACHE_COMPRESSLEVEL=6
+ENV CCACHE_HARDLINK=1
+ENV CCACHE_LOGFILE=/tmp/ccache.log
+ENV CCACHE_SLOPPINESS=file_macro,time_macros,include_file_mtime,include_file_ctime,file_stat_matches,file_stat_matches_ctime,pch_defines,modules,ivars
+ENV CCACHE_BASEDIR=/work
+ENV GHCJOBS=16
+ENV CABAL_JOBS=16
+ENV MAKE_JOBS=16
+ENV CABAL_TEST_JOBS=16
+ENV BUILDKIT_INLINE_CACHE=1
+ENV BUILDKIT_MULTI_PLATFORM=1
+
+# Set up ccache with optimized settings
+RUN mkdir -p /tmp/ccache && \
+    chmod 777 /tmp/ccache && \
+    ccache --max-size=2G && \
+    ccache --set-config=compression=true && \
+    ccache --set-config=compression_level=6 && \
+    ccache --set-config=hard_link=true && \
+    ccache --set-config=sloppiness=file_macro,time_macros,include_file_mtime,include_file_ctime,file_stat_matches,file_stat_matches_ctime,pch_defines,modules,ivars
+
+# Set up working directory with proper permissions
+WORKDIR /work
+RUN chmod 777 /work
+
+# Set default command with resource limits
+CMD ["bash", "-c", "ulimit -n 65536 && bash"] 

@@ -85,6 +85,7 @@ RUN apt-get update && apt-get install -y \
     libtinfo5 \
     zlib1g-dev \
     ccache \
+    git \
     && rm -rf /var/lib/apt/lists/*
 
 # Set up environment
@@ -97,20 +98,35 @@ ENV CABAL_DIR=/opt/cabal-store
 ENV CABAL_CONFIG=/opt/cabal-store/config
 ENV STACK_ROOT=/opt/stack
 ENV CCACHE_DIR=/tmp/ccache
-ENV CCACHE_MAXSIZE=500M
+ENV CCACHE_MAXSIZE=2G
 ENV CCACHE_COMPRESS=1
 ENV CCACHE_COMPRESSLEVEL=6
 ENV CCACHE_HARDLINK=1
 ENV CCACHE_LOGFILE=/tmp/ccache.log
 ENV CCACHE_SLOPPINESS=file_macro,time_macros,include_file_mtime,include_file_ctime,file_stat_matches,file_stat_matches_ctime,pch_defines,modules,ivars
 ENV CCACHE_BASEDIR=/work
+ENV GHCJOBS=16
+ENV CABAL_JOBS=16
+ENV MAKE_JOBS=16
+ENV CABAL_TEST_JOBS=16
+ENV BUILDKIT_INLINE_CACHE=1
+ENV BUILDKIT_MULTI_PLATFORM=1
 
-# Set up ccache
+# Set up ccache with optimized settings
 RUN mkdir -p /tmp/ccache && \
-    chmod 777 /tmp/ccache
+    chmod 777 /tmp/ccache && \
+    ccache --max-size=2G && \
+    ccache --set-config=compression=true && \
+    ccache --set-config=compression_level=6 && \
+    ccache --set-config=hard_link=true && \
+    ccache --set-config=sloppiness=file_macro,time_macros,include_file_mtime,include_file_ctime,file_stat_matches,file_stat_matches_ctime,pch_defines,modules,ivars
 
-# Set up working directory
+# Set up working directory with proper permissions
 WORKDIR /work
+RUN chmod 777 /work
 
-# Set default command
-CMD ["bash"] 
+# Set up git configuration
+RUN git config --global --add safe.directory /work
+
+# Set default command with resource limits
+CMD ["bash", "-c", "ulimit -n 65536 && bash"] 
