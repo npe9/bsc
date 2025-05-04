@@ -12,6 +12,8 @@ on:
       - '**.hsc'
       - 'Makefile'
       - '.github/workflows/**'
+      - 'Dockerfile*'
+      - '**/Dockerfile*'
   pull_request:
     branches: [ main ]
     paths:
