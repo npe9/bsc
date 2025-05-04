@@ -30,6 +30,9 @@ WORKDIR /work
 # Copy BSC source code
 COPY . .
 
+# Initialize Git submodules
+RUN git submodule update --init --recursive
+
 # Build BSC
 RUN . /root/.ghcup/env && \
     make install-src PREFIX=/work/inst
