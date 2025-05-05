@@ -35,7 +35,7 @@ permissions:
 
 env:
   CABAL_VERSION: "3.10.2.1"
-  STACK_VERSION: "2.13.1"
+  STACK_VERSION: "2.11.1"
   CCACHE_DIR: /tmp/ccache
   CCACHE_MAXSIZE: 500M
   CCACHE_COMPRESS: 1
