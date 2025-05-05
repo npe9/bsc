@@ -27,6 +27,11 @@ on:
       - '.github/workflows/**'
   workflow_dispatch:
 
+permissions:
+  contents: read
+  packages: read
+  actions: write
+
 env:
   CABAL_VERSION: "3.10.2.1"
   STACK_VERSION: "2.13.1"
@@ -49,7 +54,9 @@ jobs:
     runs-on: ubuntu-latest
     steps:
     - name: Checkout
-      uses: actions/checkout@v4.1.1
+      uses: actions/checkout@v3
+      with:
+        token: ${{ secrets.WORKFLOW_PAT }}
     - name: Setup
       run: echo "Starting Ubuntu jobs"
 
@@ -86,15 +93,19 @@ jobs:
     steps:
     - uses: actions/checkout@v4.1.1
       with:
+        token: ${{ secrets.WORKFLOW_PAT }}
         fetch-depth: 0
         submodules: recursive
 
     - name: Set up Docker Buildx
-      uses: docker/setup-buildx-action@v3.3.0
+      uses: docker/setup-buildx-action@v3.1.0
+      with:
+        token: ${{ secrets.WORKFLOW_PAT }}
 
     - name: Cache Docker layers
       uses: actions/cache@v4.0.0
       with:
+        token: ${{ secrets.WORKFLOW_PAT }}
         path: /tmp/.buildx-cache
         key: ${{ runner.os }}-docker-${{ matrix.os_version }}-${{ matrix.ghc_version }}-${{ hashFiles(format('.github/workflows/Dockerfile.ubuntu-{0}', matrix.os_version)) }}
         restore-keys: |
@@ -102,8 +113,9 @@ jobs:
           ${{ runner.os }}-docker-${{ matrix.os_version }}-
 
     - name: Build and push Docker image
-      uses: docker/build-push-action@v5.2.0
+      uses: docker/build-push-action@v5.1.0
       with:
+        token: ${{ secrets.WORKFLOW_PAT }}
         context: .
         file: .github/workflows/Dockerfile.ubuntu-${{ matrix.os_version }}
         push: false
@@ -212,8 +224,9 @@ jobs:
             build_type: test
 
     steps:
-    - uses: actions/checkout@v4.1.1
+    - uses: actions/checkout@v3
       with:
+        token: ${{ secrets.WORKFLOW_PAT }}
         fetch-depth: 0
 
     - name: Download build artifacts
@@ -275,8 +288,9 @@ jobs:
             build_type: test
 
     steps:
-    - uses: actions/checkout@v4.1.1
+    - uses: actions/checkout@v3
       with:
+        token: ${{ secrets.WORKFLOW_PAT }}
         fetch-depth: 0
 
     - name: Download build artifacts
@@ -339,8 +353,9 @@ jobs:
             build_type: test
 
     steps:
-    - uses: actions/checkout@v4.1.1
+    - uses: actions/checkout@v3
       with:
+        token: ${{ secrets.WORKFLOW_PAT }}
         fetch-depth: 0
 
     - name: Download build artifacts
@@ -379,10 +394,11 @@ jobs:
   macos:
     name: macOS
     runs-on: macos-latest
-    needs: [workflow_dispatch]
     steps:
     - name: Checkout
-      uses: actions/checkout@v4.1.1
+      uses: actions/checkout@v3
+      with:
+        token: ${{ secrets.WORKFLOW_PAT }}
     - name: Setup
       run: echo "Starting macOS jobs"
 
