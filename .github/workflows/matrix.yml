@@ -31,6 +31,7 @@ permissions:
   contents: read
   packages: read
   actions: write
+  id-token: write
 
 env:
   CABAL_VERSION: "3.10.2.1"
@@ -73,7 +74,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        os_version: [20.04, 22.04, 24.04]
+        os_version: [22.04, 24.04]
         ghc_version: [9.6.6]
         build_type: [release]
         include:
@@ -91,7 +92,7 @@ jobs:
             build_type: test
 
     steps:
-    - uses: actions/checkout@v4.1.1
+    - uses: actions/checkout@v3
       with:
         token: ${{ secrets.WORKFLOW_PAT }}
         fetch-depth: 0
@@ -103,7 +104,7 @@ jobs:
         token: ${{ secrets.WORKFLOW_PAT }}
 
     - name: Cache Docker layers
-      uses: actions/cache@v4.0.0
+      uses: actions/cache@v3
       with:
         token: ${{ secrets.WORKFLOW_PAT }}
         path: /tmp/.buildx-cache
@@ -134,7 +135,7 @@ jobs:
         mv /tmp/.buildx-cache-new /tmp/.buildx-cache
 
     - name: Cache Haskell dependencies
-      uses: actions/cache@v4.0.0
+      uses: actions/cache@v3
       with:
         path: |
           ~/.cabal/store
@@ -148,7 +149,7 @@ jobs:
           ${{ runner.os }}-${{ matrix.os_version }}-deps-
 
     - name: Cache ccache
-      uses: actions/cache@v4.0.0
+      uses: actions/cache@v3
       with:
         path: /tmp/ccache
         key: ${{ runner.os }}-${{ matrix.os_version }}-ccache-${{ matrix.ghc_version }}-${{ hashFiles('**/*.c', '**/*.cpp', '**/*.h') }}
@@ -157,7 +158,7 @@ jobs:
           ${{ runner.os }}-${{ matrix.os_version }}-ccache-
 
     - name: Cache package indices
-      uses: actions/cache@v4.0.0
+      uses: actions/cache@v3
       with:
         path: |
           ~/.cabal/packages
@@ -236,7 +237,7 @@ jobs:
         path: .
 
     - name: Cache GHC
-      uses: actions/cache@v4.0.0
+      uses: actions/cache@v3
       id: cache-ghc
       with:
         path: |
@@ -300,7 +301,7 @@ jobs:
         path: .
 
     - name: Cache GHC
-      uses: actions/cache@v4.0.0
+      uses: actions/cache@v3
       id: cache-ghc
       with:
         path: |
@@ -365,7 +366,7 @@ jobs:
         path: .
 
     - name: Cache GHC
-      uses: actions/cache@v4.0.0
+      uses: actions/cache@v3
       id: cache-ghc
       with:
         path: |
@@ -437,7 +438,7 @@ jobs:
         fetch-depth: 0
 
     - name: Cache GHC
-      uses: actions/cache@v4.0.0
+      uses: actions/cache@v3
       id: cache-ghc
       with:
         path: |
@@ -449,7 +450,7 @@ jobs:
           macos-${{ matrix.os_version }}-ghc-${{ matrix.ghc_version }}-
 
     - name: Cache build artifacts
-      uses: actions/cache@v4.0.0
+      uses: actions/cache@v3
       id: cache-build
       with:
         path: |
@@ -460,7 +461,7 @@ jobs:
           macos-${{ matrix.os_version }}-build-${{ matrix.ghc_version }}-
 
     - name: Cache ccache
-      uses: actions/cache@v4.0.0
+      uses: actions/cache@v3
       id: cache-ccache
       with:
         path: /tmp/ccache
@@ -490,7 +491,7 @@ jobs:
         enable-stack: true
 
     - name: Cache Haskell dependencies
-      uses: actions/cache@v4.0.0
+      uses: actions/cache@v3
       id: cache-deps
       with:
         path: |
@@ -559,7 +560,7 @@ jobs:
         path: .
 
     - name: Cache GHC
-      uses: actions/cache@v4.0.0
+      uses: actions/cache@v3
       id: cache-ghc
       with:
         path: |
@@ -622,7 +623,7 @@ jobs:
         path: .
 
     - name: Cache GHC
-      uses: actions/cache@v4.0.0
+      uses: actions/cache@v3
       id: cache-ghc
       with:
         path: |
@@ -686,7 +687,7 @@ jobs:
         path: .
 
     - name: Cache GHC
-      uses: actions/cache@v4.0.0
+      uses: actions/cache@v3
       id: cache-ghc
       with:
         path: |
