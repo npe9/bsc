@@ -407,7 +407,7 @@ jobs:
   macos-build:
     name: Build (macOS ${{ matrix.os_version }}, GHC ${{ matrix.ghc_version }})
     needs: macos
-    runs-on: macos-${{ matrix.os_version }}
+    runs-on: macos-latest
     timeout-minutes: 60
     env:
       GHC_VERSION: ${{ matrix.ghc_version }}
@@ -415,20 +415,20 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        os_version: [13, 14, 15]
+        os_version: [latest]
         ghc_version: [9.6.6]
         build_type: [release]
         include:
-          - os_version: 14
+          - os_version: latest
             ghc_version: 9.4.8
             build_type: test
-          - os_version: 14
+          - os_version: latest
             ghc_version: 9.8.4
             build_type: test
-          - os_version: 14
+          - os_version: latest
             ghc_version: 9.10.1
             build_type: test
-          - os_version: 14
+          - os_version: latest
             ghc_version: 9.12.1
             build_type: test
 
@@ -525,26 +525,26 @@ jobs:
   macos-test:
     name: Test (macOS ${{ matrix.os_version }}, GHC ${{ matrix.ghc_version }})
     needs: macos-build
-    runs-on: macos-${{ matrix.os_version }}
+    runs-on: macos-latest
     timeout-minutes: 30
 
     strategy:
       fail-fast: false
       matrix:
-        os_version: [13, 14, 15]
+        os_version: [latest]
         ghc_version: [9.6.6]
         build_type: [release]
         include:
-          - os_version: 14
+          - os_version: latest
             ghc_version: 9.4.8
             build_type: test
-          - os_version: 14
+          - os_version: latest
             ghc_version: 9.8.4
             build_type: test
-          - os_version: 14
+          - os_version: latest
             ghc_version: 9.10.1
             build_type: test
-          - os_version: 14
+          - os_version: latest
             ghc_version: 9.12.1
             build_type: test
 
@@ -589,25 +589,25 @@ jobs:
   macos-hls:
     name: HLS (macOS ${{ matrix.os_version }}, GHC ${{ matrix.ghc_version }})
     needs: macos-build
-    runs-on: macos-${{ matrix.os_version }}
+    runs-on: macos-latest
     timeout-minutes: 20
     strategy:
       fail-fast: false
       matrix:
-        os_version: [13, 14, 15]
+        os_version: [latest]
         ghc_version: [9.6.6]
         build_type: [release]
         include:
-          - os_version: 14
+          - os_version: latest
             ghc_version: 9.4.8
             build_type: test
-          - os_version: 14
+          - os_version: latest
             ghc_version: 9.8.4
             build_type: test
-          - os_version: 14
+          - os_version: latest
             ghc_version: 9.10.1
             build_type: test
-          - os_version: 14
+          - os_version: latest
             ghc_version: 9.12.1
             build_type: test
 
@@ -653,25 +653,25 @@ jobs:
   macos-ghci:
     name: GHCI (macOS ${{ matrix.os_version }}, GHC ${{ matrix.ghc_version }})
     needs: macos-build
-    runs-on: macos-${{ matrix.os_version }}
+    runs-on: macos-latest
     timeout-minutes: 20
     strategy:
       fail-fast: false
       matrix:
-        os_version: [13, 14, 15]
+        os_version: [latest]
         ghc_version: [9.6.6]
         build_type: [release]
         include:
-          - os_version: 14
+          - os_version: latest
             ghc_version: 9.4.8
             build_type: test
-          - os_version: 14
+          - os_version: latest
             ghc_version: 9.8.4
             build_type: test
-          - os_version: 14
+          - os_version: latest
             ghc_version: 9.10.1
             build_type: test
-          - os_version: 14
+          - os_version: latest
             ghc_version: 9.12.1
             build_type: test
 
@@ -710,19 +710,4 @@ jobs:
 
     - name: Check GHCI load
       run: |
-        make -j${{ env.MAKE_JOBS }} test-ghci
-
-    - name: Create cabal.project
-      run: |
-        cat > cabal.project << EOF
-        packages: .
-        tests: True
-        benchmarks: True
-        optimization: 2
-        documentation: False
-        tests-show-details: direct
-        tests-show-log: True
-        tests-keep-tix: True
-        tests-keep-going: True
-        tests-jobs: ${{ env.CABAL_TEST_JOBS }}
-        EOF 
+        make -j${{ env.MAKE_JOBS }} test-ghci 
